@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard - Applicants</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
+  <style>
+    .custom-container {
+      padding: 20px;
+    }
+    .reasons-container {
+      max-height: 300px;
+      overflow-y: auto;
+      padding: 5px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      background: #f8f9fa;
+    }
+    .reasons-container ul {
+      padding-left: 20px;
+      margin: 0;
+    }
+    .reasons-container li {
+      margin-bottom: 5px;
+    }
+    /* Badge styles */
+    .status-approved {
+      background-color: #d4edda;
+      color: #155724;
+      padding: 5px 10px;
+      border-radius: 5px;
+      font-weight: bold;
+      font-size: 18px;
+    }
+    .status-rejected {
+      background-color: #f8d7da;
+      color: #dc3545;
+      padding: 5px 10px;
+      border-radius: 5px;
+      font-weight: bold;
+      font-size: 18px;
+    }
+    .btn {
+      width: 150px;
+      font-size: 18px;
+    }
+    .btn-approve {
+      background: linear-gradient(135deg, #4CAF50, #2E7D32);
+      color: white !important;
+      border: none;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0,128,0,0.2);
+      padding: 6px 12px;
+      transition: all 0.3s ease-in-out;
+    }
+    .btn-approve:hover {
+      background: linear-gradient(135deg, #2E7D32, #1B5E20);
+      box-shadow: 0 6px 10px rgba(0,128,0,0.3);
+      transform: translateY(-2px);
+    }
+    .btn-reject {
+      background: linear-gradient(135deg, #E53935, #B71C1C);
+      color: white !important;
+      border: none;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(255,0,0,0.2);
+      padding: 6px 12px;
+      transition: all 0.3s ease-in-out;
+    }
+    .btn-reject:hover {
+      background: linear-gradient(135deg, #B71C1C, #7F0000);
+      box-shadow: 0 6px 10px rgba(255,0,0,0.3);
+      transform: translateY(-2px);
+    }
+    .table td, .table th {
+      vertical-align: middle;
+    }
+    /* Loading Overlay */
+    #loadingOverlay {
+      position: fixed;
+      top: 0; 
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.4);
+      z-index: 9999;
+      display: none;
+    }
+    #loadingOverlay .spinner-container {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      color: #fff;
+    }
+    .spinner {
+      margin: 0 auto 15px auto;
+      width: 50px;
+      height: 50px;
+      border: 6px solid #ccc;
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay">
+    <div class="spinner-container">
+      <div class="spinner"></div>
+      <h4>Updating Results...</h4>
+    </div>
+  </div>
+
+  <!-- Modal for scheduling interview -->
+  <div class="modal fade" id="scheduleModal" tabindex="-1" aria-labelledby="scheduleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="scheduleModalLabel">Schedule Interview</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="scheduleForm">
+            <div class="mb-3">
+              <label for="interviewDateTime" class="form-label">Select Interview Date/Time</label>
+              <!-- Use datetime-local input for selecting date and time -->
+              <input type="datetime-local" id="interviewDateTime" class="form-control" required>
+            </div>
+            <div class="mb-3" style="width: 60%; align-self: center; margin: auto;">
+              <label for="emailSelect" class="form-label">Send to Interviewers:</label>
+              <select id="emailSelect" class="form-select" multiple>
+              </select>
+            </div>
+          </form>
+                  
+        </div>
+        <div class="modal-footer">
+          <button type="button" id="scheduleBtn" class="btn btn-primary">Schedule Interview</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="custom-container">
+    <h2>Dashboard</h2>
+    <div class="mb-3">
+      <label for="roleSelect" class="form-label">Select Role</label>
+      <select id="roleSelect" class="form-select">
+        <option value="" disabled selected>Select a role</option>
+        {% for role in roles %}
+          <option value="{{ role.Role }}">{{ role.Role }}</option>
+        {% endfor %}
+        <option value="all">View All Applicants</option>
+      </select>
+    </div>
+
+    <table class="table table-bordered" id="applicantsTable" style="display:none;">
+      <thead class="table-light">
+        <tr>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Role</th>
+          <th>Score</th>
+          <th>Reasons</th>
+          <th>Resume Filtering</th>
+          <th>Approve for Interview</th>
+        </tr>
+      </thead>
+      <tbody id="applicantsTbody">
+      </tbody>
+    </table>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+  <script>
+    const emailSelect = document.getElementById("emailSelect");
+    let choicesInstance;
+
+    async function fetchInterviewers() {
+    emailSelect.innerHTML = `<option disabled selected>Loading interviewers...</option>`;
+    const res = await fetch("/interviewers");
+    const data = await res.json();
+    if (data && Array.isArray(data.interviewers)) {
+        // Destroy existing instance if re-fetching
+        if (choicesInstance) choicesInstance.destroy();
+
+        // Populate select options
+        emailSelect.innerHTML = ""; 
+        data.interviewers.forEach(email => {
+        const option = document.createElement("option");
+        option.value = email;
+        option.textContent = email;
+        emailSelect.appendChild(option);
+        });
+
+        // Initialize Choices.js
+        choicesInstance = new Choices(emailSelect, {
+        removeItemButton: true,
+        placeholderValue: 'Select interviewers',
+        searchPlaceholderValue: 'Search interviewers',
+        shouldSort: false,
+        classNames: {
+            containerInner: 'form-control'
+        }
+        });
+    }
+    }
+    fetchInterviewers();
+
+    let currentApplicantId = null;
+    let currentRowElement = null;
+  
+    // Fetch applicants when role selection changes
+    $("#roleSelect").on("change", function(){
+      let selectedRole = $(this).val();
+      $("#applicantsTbody").empty();
+      $("#applicantsTable").show();
+  
+      $.ajax({
+        url: "/get-applicants",
+        method: "GET",
+        data: { role: selectedRole },
+        success: function(response) {
+          if(response.applicants && response.applicants.length > 0){
+            response.applicants.forEach(function(applicant) {
+              addApplicantRow(applicant);
+            });
+          } else {
+            $("#applicantsTbody").append('<tr><td colspan="7" class="text-center">No applicants found.</td></tr>');
+          }
+        },
+        error: function(err) {
+          console.error("Error fetching applicants", err);
+          alert("Failed to fetch applicants.");
+        }
+      });
+    });
+  
+    // Function to add a row for each applicant
+    function addApplicantRow(applicant) {
+      let resumeFilterBadge = "";
+      if(applicant.resume_filtering === "Approved") {
+        resumeFilterBadge = `<span class="status-approved">Approved</span>`;
+      } else if(applicant.resume_filtering === "Rejected") {
+        resumeFilterBadge = `<span class="status-rejected">Rejected</span>`;
+      }
+  
+      let interviewContent = "";
+      if(applicant.round_1_results === "Approved") {
+        interviewContent = `<span class="status-approved">Approved</span>`;
+      } else if(applicant.round_1_results === "Rejected") {
+        interviewContent = `<span class="status-rejected">Rejected</span>`;
+      } else {
+        interviewContent = `
+          <button type="button" class="btn btn-sm btn-approve approve-btn">Approve</button><br/><br/>
+          <button type="button" class="btn btn-sm btn-reject reject-btn">Reject</button>
+        `;
+      }
+  
+      let reasonsHtml = "";
+      if(applicant.reasons && applicant.reasons.length > 0) {
+        reasonsHtml = "<ul>";
+        applicant.reasons.forEach(function(reason) {
+          reasonsHtml += `<li>${reason}</li>`;
+        });
+        reasonsHtml += "</ul>";
+      }
+  
+      let row = $(`
+        <tr data-applicant-id="${applicant._id}">
+          <td>${applicant.name}</td>
+          <td>${applicant.email}</td>
+          <td>${applicant.role}</td>
+          <td>${applicant.score || ''}</td>
+          <td><div class="reasons-container">${reasonsHtml}</div></td>
+          <td>${resumeFilterBadge}</td>
+          <td class="action-cell" style="text-align: center;">${interviewContent}</td>
+        </tr>
+      `);
+  
+      if(!applicant.round_1_results) {
+        row.find(".approve-btn").on("click", function(){
+          currentApplicantId = applicant._id;
+          currentRowElement = row;
+          let scheduleModal = new bootstrap.Modal(document.getElementById("scheduleModal"));
+          let now = new Date().toISOString().slice(0,16);
+          $("#interviewDateTime").attr("min", now);
+          scheduleModal.show();
+        });
+  
+        row.find(".reject-btn").on("click", function(){
+          updateApplicantStatus(applicant._id, "Rejected", row);
+        });
+      }
+  
+      $("#applicantsTbody").append(row);
+    }
+  
+    // Modal schedule button click handler
+    $("#scheduleBtn").on("click", function(){
+      let selectedEmails = $("#emailSelect").val();
+      let dateTimeVal = $("#interviewDateTime").val();
+  
+      if (!dateTimeVal) {
+        alert("Please select a valid date/time.");
+        return;
+      }
+  
+      if (!selectedEmails || selectedEmails.length === 0) {
+        alert("Please select at least one interviewer.");
+        return;
+      }
+  
+      let scheduleModalEl = document.getElementById("scheduleModal");
+      let scheduleModal = bootstrap.Modal.getInstance(scheduleModalEl);
+      scheduleModal.hide();
+  
+      scheduleInterview(currentApplicantId, dateTimeVal, selectedEmails, currentRowElement);
+    });
+  
+    function showLoadingOverlay() {
+      document.getElementById("loadingOverlay").style.display = "block";
+    }
+  
+    function hideLoadingOverlay() {
+      document.getElementById("loadingOverlay").style.display = "none";
+    }
+  
+    function updateApplicantStatus(applicantId, newStatus, rowElement) {
+      showLoadingOverlay();
+      $.ajax({
+        url: "/update-applicant",
+        method: "POST",
+        contentType: "application/json",
+        data: JSON.stringify({ applicant_id: applicantId, round_1_results: newStatus }),
+        success: function(response) {
+          hideLoadingOverlay();
+          let badgeClass = newStatus === "Approved" ? "status-approved" : "status-rejected";
+          rowElement.find(".action-cell").html(`<span class="${badgeClass}">${newStatus}</span>`);
+          alert("Interview status updated to " + newStatus);
+        },
+        error: function(err) {
+          hideLoadingOverlay();
+          console.error("Error updating applicant status", err);
+          alert("Failed to update applicant status.");
+        }
+      });
+    }
+  
+    function scheduleInterview(applicantId, interviewDateTime, interviewers, rowElement) {
+      showLoadingOverlay();
+      $.ajax({
+        url: "/schedule-interview",
+        method: "POST",
+        contentType: "application/json",
+        data: JSON.stringify({
+          applicant_id: applicantId,
+          interview_datetime: interviewDateTime,
+          interviewers: interviewers
+        }),
+        success: function(response) {
+          hideLoadingOverlay();
+          rowElement.find(".action-cell").html(`<span class="status-approved">Approved</span>`);
+          alert("Interview scheduled successfully!");
+        },
+        error: function(err) {
+          hideLoadingOverlay();
+          console.error("Error scheduling interview:", err);
+          alert("Failed to schedule interview.");
+        }
+      });
+    }
+  </script>
+    <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+</body>
+</html>

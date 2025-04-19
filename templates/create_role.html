@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Create Role</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Encode+Sans+Semi+Expanded:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: "Encode Sans Semi Expanded", sans-serif;
+      padding: 20px;
+    }
+    .skill-row {
+      margin-bottom: 10px;
+    }
+    .skill-key {
+      width: 60%;
+    }
+    .skill-value {
+      width: 30%;
+      margin-left: 10px;
+    }
+    .remove-btn {
+      margin-left: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container mt-4">
+    <h2>Create Role</h2>
+    <form id="createRoleForm">
+      <!-- Role Name Input -->
+      <div class="mb-3">
+        <label for="roleName" class="form-label">Role Name</label>
+        <input type="text" id="roleName" name="roleName" class="form-control" placeholder="Enter role name" required>
+      </div>
+      <!-- Initial Job Description Input -->
+      <div class="mb-3">
+        <label for="initialJobDesc" class="form-label">Initial Job Description</label>
+        <textarea id="initialJobDesc" name="initialJobDesc" class="form-control" rows="5" placeholder="Enter initial job description" required></textarea>
+      </div>
+      <!-- Enhance Button -->
+      <button type="button" id="enhanceBtn" class="btn btn-secondary">Enhance Job Description</button>
+    </form>
+
+    <hr>
+
+    <!-- Enhanced Job Description Section -->
+    <div id="enhancedSection" style="display:none;">
+      <h4>Enhanced Job Description</h4>
+      <textarea id="enhancedJobDesc" class="form-control" rows="7" style="min-height: 600px;"></textarea>
+      
+      <h4 class="mt-4">Skill Weighting</h4>
+      <div id="skillsContainer"></div>
+      <button type="button" id="addSkillBtn" class="btn btn-sm btn-outline-primary mt-2">Add Skill</button>
+      <br><br>
+      <!-- Publish Role Button -->
+      <button type="button" id="publishRoleBtn" class="btn btn-success">Publish Role</button>
+    </div>
+  </div>
+
+  <!-- jQuery for AJAX and dynamic manipulation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+  <script>
+    // When Enhance button is clicked
+    $("#enhanceBtn").on("click", function() {
+      const role = $("#roleName").val().trim();
+      const jobDesc = $("#initialJobDesc").val().trim();
+      if (!role || !jobDesc) {
+        alert("Please fill in both the role name and job description.");
+        return;
+      }
+      
+      // Show Enhancing animation on the Enhance button
+      const $enhanceBtn = $("#enhanceBtn");
+      $enhanceBtn.prop("disabled", true);
+      $enhanceBtn.html('<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Enhancing...');
+
+      // Send role and job description to the backend endpoint.
+      $.ajax({
+        url: "/enhance-role",
+        method: "POST",
+        contentType: "application/json",
+        data: JSON.stringify({ role: role, job_description: jobDesc }),
+        success: function(response) {
+          $("#enhancedSection").show();
+          $("#enhancedJobDesc").val(response.enhanced_description);
+          $("#skillsContainer").empty();
+          if(response.skills && response.skills.length > 0) {
+            response.skills.forEach(function(skillObj) {
+              addSkillRow(skillObj.skill, skillObj.weight);
+            });
+          }
+          // Reset Enhance button
+          $enhanceBtn.prop("disabled", false);
+          $enhanceBtn.html('Enhance Job Description');
+        },
+        error: function(err) {
+          console.error("Error enhancing job description", err);
+          alert("Failed to enhance job description.");
+          $enhanceBtn.prop("disabled", false);
+          $enhanceBtn.html('Enhance Job Description');
+        }
+      });
+    });
+
+    // Function to add a skill weight row
+    function addSkillRow(skill = '', weight = '') {
+      const row = $(`
+        <div class="skill-row d-flex align-items-center">
+          <input type="text" class="form-control skill-key" placeholder="Skill/Topic" value="${skill}">
+          <input type="number" class="form-control skill-value" placeholder="Weight (%)" value="${weight}">
+          <button type="button" class="btn btn-sm btn-outline-danger remove-btn">Delete</button>
+        </div>
+      `);
+      row.find(".remove-btn").on("click", function(){
+        row.remove();
+      });
+      $("#skillsContainer").append(row);
+    }
+
+    // Allow manual addition of a new skill row
+    $("#addSkillBtn").on("click", function(){
+      addSkillRow();
+    });
+
+    // When Publish Role button is clicked
+    $("#publishRoleBtn").on("click", function(){
+      const roleName = $("#roleName").val().trim();
+      const enhancedJobDesc = $("#enhancedJobDesc").val().trim();
+
+      // Collect skills and weights into an object
+      let weights = {};
+      $("#skillsContainer .skill-row").each(function(){
+        let skill = $(this).find(".skill-key").val().trim();
+        let weight = $(this).find(".skill-value").val().trim();
+        if(skill && weight) {
+          weights[skill] = Number(weight);
+        }
+      });
+
+      if (!roleName || !enhancedJobDesc || Object.keys(weights).length === 0) {
+        alert("Please ensure role name, enhanced job description, and at least one skill weight are provided.");
+        return;
+      }
+
+      // Disable Publish button and show Enhancing spinner
+      const $publishBtn = $("#publishRoleBtn");
+      $publishBtn.prop("disabled", true);
+      $publishBtn.html('<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Publishing...');
+
+      // Send data to backend endpoint /publish-role
+      $.ajax({
+        url: "/publish-role",
+        method: "POST",
+        contentType: "application/json",
+        data: JSON.stringify({
+          role_name: roleName,
+          job_description: enhancedJobDesc,
+          weights: weights
+        }),
+        success: function(response) {
+          alert("Role published successfully!");
+          // Reset Publish button
+          $publishBtn.prop("disabled", false);
+          $publishBtn.html('Publish Role');
+        },
+        error: function(err) {
+          console.error("Error publishing role", err);
+          alert("Failed to publish role.");
+          $publishBtn.prop("disabled", false);
+          $publishBtn.html('Publish Role');
+        }
+      });
+    });
+  </script>
+</body>
+</html>

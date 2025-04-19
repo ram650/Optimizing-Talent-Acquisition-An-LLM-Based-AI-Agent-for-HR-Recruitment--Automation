@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Craft Interview Questions Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
+
+  <style>
+    body {
+      background: #f8f9fa;
+    }
+    .container {
+      max-width: 800px;
+      margin-top: 50px;
+    }
+    .table td, .table th {
+      vertical-align: middle;
+    }
+    .dropzone {
+      border: 2px dashed #6c757d;
+      border-radius: 10px;
+      padding: 10px;
+      text-align: center;
+      color: #6c757d;
+      background: #ffffff;
+      transition: background 0.3s;
+      cursor: pointer;
+    }
+    .dropzone.dragover {
+      background: #e9ecef;
+    }
+    .result-area {
+      white-space: pre-wrap;
+      max-height: 500px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="container shadow p-4 bg-white rounded">
+    <h2 class="mb-4 text-center">Craft Interview Questions</h2>
+    
+    <div class="mb-3">
+      <button id="addRowBtn" class="btn btn-secondary">Add Topic</button>
+    </div>
+    
+    <table class="table table-bordered" id="topicsTable">
+      <thead class="table-light">
+        <tr>
+          <th style="width: 30%;">Topic</th>
+          <th style="width: 30%;">Knowledge File (Optional)</th>
+          <th style="width: 20%;">Number of Questions</th>
+          <th style="width: 20%;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+      </tbody>
+    </table>
+    
+    <div class="mb-3 text-center">
+      <button id="generateBtn" class="btn btn-primary">Generate All Questions</button>
+    </div>
+    
+    <div class="mb-3">
+      <h4>Generated Questions</h4>
+      <textarea id="questionsOutput" class="form-control result-area" rows="15" placeholder="Generated questions will appear here..."></textarea>
+    </div>
+  </div>
+  <br>
+  <div class="mb-3" style="width: 60%; align-self: center; margin: auto;">
+    <label for="emailSelect" class="form-label">Send to Interviewers:</label>
+    <select id="emailSelect" class="form-select" multiple></select>
+  </div>
+  
+  
+  <div class="text-center mb-4">
+    <button id="sendMailBtn" class="btn btn-success">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-envelope-fill me-2" viewBox="0 0 16 16">
+        <path d="M.05 3.555A2 2 0 0 1 2 2h12a2 2 0 0 1 1.95 1.555L8 8.414.05 3.555zM0 4.697v7.104l5.803-3.552L0 4.697zM6.761 8.83 0 12.803A2 2 0 0 0 2 14h12a2 2 0 0 0 2-1.197L9.239 8.83 8 9.586l-1.239-.757zM16 4.697l-5.803 3.552L16 11.801V4.697z"/>
+      </svg>
+      Mail Questions
+    </button>
+  </div>
+  
+  <script>
+    // Function to create a new row in the topics table
+    function addRow(topic = "", numQuestions = 10) {
+      const tbody = document.querySelector("#topicsTable tbody");
+      
+      const tr = document.createElement("tr");
+
+      // Topic Name
+      const tdTopic = document.createElement("td");
+      const topicInput = document.createElement("input");
+      topicInput.type = "text";
+      topicInput.placeholder = "Enter topic";
+      topicInput.classList.add("form-control");
+      topicInput.value = topic;
+      tdTopic.appendChild(topicInput);
+      tr.appendChild(tdTopic);
+
+      // File upload area (using dropzone style)
+      const tdFile = document.createElement("td");
+      tdFile.innerHTML = `
+        <div class="dropzone" onclick="this.querySelector('input').click()">
+          <span class="dropzone-text">Drag & drop or click to select file</span>
+          <input type="file" accept=".pdf,.docx,.txt,.md" style="display:none;">
+          <span class="file-name ms-2"></span>
+        </div>`;
+      tr.appendChild(tdFile);
+
+      // Number of Questions
+      const tdNum = document.createElement("td");
+      const numInput = document.createElement("input");
+      numInput.type = "number";
+      numInput.min = 1;
+      numInput.classList.add("form-control");
+      numInput.value = numQuestions;
+      tdNum.appendChild(numInput);
+      tr.appendChild(tdNum);
+
+      // Actions: Remove row
+      const tdActions = document.createElement("td");
+      const removeBtn = document.createElement("button");
+      removeBtn.classList.add("btn", "btn-danger", "btn-sm");
+      removeBtn.textContent = "Remove";
+      removeBtn.addEventListener("click", () => { tr.remove(); });
+      tdActions.appendChild(removeBtn);
+      tr.appendChild(tdActions);
+
+      // Attach drag and drop handlers to the dropzone
+      const dropzone = tdFile.querySelector(".dropzone");
+      const fileInput = dropzone.querySelector("input");
+      const fileNameDisplay = dropzone.querySelector(".file-name");
+
+      dropzone.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          dropzone.classList.add("dragover");
+      });
+      dropzone.addEventListener("dragleave", () => {
+          dropzone.classList.remove("dragover");
+      });
+      dropzone.addEventListener("drop", (e) => {
+          e.preventDefault();
+          dropzone.classList.remove("dragover");
+          if (e.dataTransfer.files.length > 0) {
+              fileInput.files = e.dataTransfer.files;
+              fileNameDisplay.textContent = e.dataTransfer.files[0].name;
+          }
+      });
+      fileInput.addEventListener("change", (e) => {
+          if (e.target.files.length > 0) {
+              fileNameDisplay.textContent = e.target.files[0].name;
+          }
+      });
+
+      tbody.appendChild(tr);
+    }
+
+    document.getElementById("addRowBtn").addEventListener("click", () => {
+      addRow();
+    });
+
+    // Optionally add an initial row
+    addRow();
+
+    // Function to generate questions for all topics
+    async function generateQuestions() {
+      const rows = document.querySelectorAll("#topicsTable tbody tr");
+      let allResults = "";
+
+      for (const row of rows) {
+        const topic = row.cells[0].querySelector("input").value.trim();
+        const numQuestions = row.cells[2].querySelector("input").value.trim();
+        const fileInput = row.cells[1].querySelector("input");
+        const file = fileInput.files[0];  // may be undefined if no file selected
+
+        if (!topic) {
+          alert("Please enter a topic for each row.");
+          return;
+        }
+        if (!numQuestions || isNaN(numQuestions) || numQuestions < 1) {
+          alert("Please enter a valid number of questions for " + topic);
+          return;
+        }
+
+        // If file is provided, call /add-kb endpoint first to upload it.
+        if (file) {
+          const formData = new FormData();
+          formData.append("document", file);
+          formData.append("topic", topic);
+
+          try {
+            const uploadRes = await fetch("/add-kb", {
+              method: "POST",
+              body: formData
+            });
+            const uploadData = await uploadRes.json();
+            if (uploadData.error) {
+              alert(`Error uploading file for ${topic}: ${uploadData.error}`);
+              continue;
+            }
+          } catch (err) {
+            console.error("Upload failed for " + topic, err);
+            alert(`Upload failed for ${topic}`);
+            continue;
+          }
+        }
+        
+        // Now generate questions for this topic
+        try {
+          const payload = {
+            topic: topic,
+            num_questions: numQuestions
+          };
+          const genRes = await fetch("/generate-questions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+          const genData = await genRes.json();
+          if (genData.error) {
+            allResults += `\n----\nTopic: ${topic}\nError: ${genData.error}\n`;
+          } else {
+            allResults += `\n----\nTopic: ${topic}\n${genData.questions}\n`;
+          }
+        } catch (err) {
+          console.error("Generation failed for " + topic, err);
+          allResults += `\n----\nTopic: ${topic}\nError: Could not generate questions.\n`;
+        }
+      }
+
+      document.getElementById("questionsOutput").value = allResults;
+    }
+
+    document.getElementById("generateBtn").addEventListener("click", () => {
+      // Disable button while processing
+      document.getElementById("generateBtn").disabled = true;
+      generateQuestions().finally(() => {
+        document.getElementById("generateBtn").disabled = false;
+      });
+    });
+    const emailSelect = document.getElementById("emailSelect");
+    let choicesInstance;
+
+    async function fetchInterviewers() {
+    emailSelect.innerHTML = `<option disabled selected>Loading interviewers...</option>`;
+    const res = await fetch("/interviewers");
+    const data = await res.json();
+    if (data && Array.isArray(data.interviewers)) {
+        // Destroy existing instance if re-fetching
+        if (choicesInstance) choicesInstance.destroy();
+
+        // Populate select options
+        emailSelect.innerHTML = ""; 
+        data.interviewers.forEach(email => {
+        const option = document.createElement("option");
+        option.value = email;
+        option.textContent = email;
+        emailSelect.appendChild(option);
+        });
+
+        // Initialize Choices.js
+        choicesInstance = new Choices(emailSelect, {
+        removeItemButton: true,
+        placeholderValue: 'Select interviewers',
+        searchPlaceholderValue: 'Search interviewers',
+        shouldSort: false,
+        classNames: {
+            containerInner: 'form-control'
+        }
+        });
+    }
+    }
+    document.getElementById("sendMailBtn").addEventListener("click", async () => {
+        const selectedEmails = Array.from(emailSelect.selectedOptions).map(opt => opt.value);
+        const questions = document.getElementById("questionsOutput").value.trim();
+
+        if (selectedEmails.length === 0) {
+            alert("Please select at least one interviewer to send the questions to.");
+            return;
+        }
+
+        if (!questions) {
+            alert("There are no questions to send!");
+            return;
+        }
+
+        try {
+            const res = await fetch("/send-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                recipients: selectedEmails,
+                body: questions
+            })
+            });
+
+            const data = await res.json();
+
+            if (data.success) {
+            alert(data.message || "Emails sent successfully! 📬");
+            } else {
+            alert("Failed to send emails: " + (data.error || "Unknown error"));
+            }
+
+        } catch (err) {
+            console.error("Error sending emails", err);
+            alert("Something went wrong while sending the emails.");
+        }
+    });
+
+ fetchInterviewers();
+
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+
+</body>
+</html>

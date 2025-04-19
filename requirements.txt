@@ -1,0 +1,22 @@
+flask
+pymongo
+bson
+fitz
+groq
+tempfile
+json
+smtplib
+email
+playwright
+asyncio
+apscheduler
+selenium
+webdriver-manager
+pytz
+
+# create_database.py requirements
+langchain
+sentence_transformers
+langchain_community
+chromadb
+pypdf

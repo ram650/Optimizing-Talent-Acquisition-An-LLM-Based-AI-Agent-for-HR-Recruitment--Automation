@@ -1,0 +1,10 @@
+venv
+drive_downloader.py
+ai-hr-454012-2762494e8222.json
+KnowledgeBase
+Resumes
+__pycache__
+.env
+credentials.json
+service_acc.json
+token.pickle

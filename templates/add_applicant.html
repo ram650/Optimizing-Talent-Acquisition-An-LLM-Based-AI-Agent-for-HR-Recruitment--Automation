@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Add Applicant</title>
+  
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Encode+Sans+Semi+Expanded:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/dropzone/5.9.3/min/dropzone.min.css">
+
+  <style>
+    body {
+      font-family: "Encode Sans Semi Expanded", sans-serif;
+      padding: 20px;
+    }
+    /* Style only the drop area container */
+    #dropzone {
+      border: 2px dashed #007bff;
+      border-radius: 10px;
+      background: #f8f9fa;
+      padding: 20px;
+      text-align: center;
+      cursor: pointer;
+    }
+    .dz-preview .dz-success-mark,
+    .dz-preview .dz-error-mark {
+      display: none !important;
+      visibility: hidden !important;
+      pointer-events: none !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Add Applicant</h2>
+    
+    <!-- Main form for applicant info -->
+    <form action="{{ url_for('submit_applicant') }}" method="post" id="applicantForm">
+      <!-- Role Selection -->
+      <div class="mb-3">
+        <label for="role" class="form-label">Select Role</label>
+        <select id="role" name="role" class="form-select" required>
+          <option value="" disabled selected>Select a role</option>
+          {% for role in roles %}
+            <option value="{{ role.Role }}" data-jd="{{ role.JD|e }}">{{ role.Role }}</option>
+          {% endfor %}
+        </select>        
+      </div>
+
+      <!-- Job Description Container (hidden by default) -->
+      <div class="mb-3" id="jobDescriptionContainer" style="display: none;">
+        <label class="form-label">Job Description</label>
+        <textarea id="jobDescription" class="form-control" rows="5" style="min-height: 600px;" readonly></textarea>
+      </div>
+
+      <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        document.getElementById("role").addEventListener("change", function(){
+          let selectedOption = this.options[this.selectedIndex];
+          let jobDesc = selectedOption.getAttribute("data-jd");
+
+          let jdContainer = document.getElementById("jobDescriptionContainer");
+          let jdContent = document.getElementById("jobDescription");
+
+          if(jobDesc) {
+            jdContent.value = jobDesc;
+            jdContainer.style.display = "block";
+          } else {
+            jdContent.value = "";
+            jdContainer.style.display = "none";
+          }
+        });
+      });
+      </script>
+
+      <!-- Name -->
+      <div class="mb-3">
+        <label for="name" class="form-label">Applicant Name</label>
+        <input type="text" id="name" name="name" class="form-control" placeholder="Applicant Name" required>
+      </div>
+
+      <!-- Email -->
+      <div class="mb-3">
+        <label for="email" class="form-label">Email Address</label>
+        <input type="email" id="email" name="email" class="form-control" placeholder="Applicant Email" required>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Upload Resume (PDF Only)</label>
+        <div id="dropzone">
+          <p>Drag & drop a PDF here or click to upload</p>
+        </div>
+        <!-- Hidden input to store extracted resume content -->
+        <input type="hidden" id="resume_content" name="resume_content">
+      </div>
+
+      <button type="submit" id="submitBtn" class="btn btn-primary" disabled>Submit</button>
+    </form>
+  </div>
+
+  <!-- jQuery and Dropzone -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dropzone/5.9.3/min/dropzone.min.js"></script>
+  <script>
+    Dropzone.autoDiscover = false;
+
+    document.addEventListener("DOMContentLoaded", function () {
+      let myDropzone = new Dropzone("#dropzone", {
+        url: "/upload-pdf",
+        paramName: "file",
+        maxFiles: 1,
+        maxFilesize: 5,
+        acceptedFiles: "application/pdf",
+        dictDefaultMessage: "Drag & drop a PDF here or click to upload",
+        init: function () {
+          this.on("success", function (file, response) {
+            console.log("Upload Success:", response);
+            if (response.resume_content) {
+              document.getElementById("resume_content").value = response.resume_content;
+            }
+            setTimeout(checkFields, 500);
+          });
+
+          this.on("error", function (file, errorMessage) {
+            console.error("Upload error:", errorMessage);
+          });
+
+          this.on("removedfile", function () {
+            document.getElementById("resume_content").value = "";
+            checkFields();
+          });
+        }
+      });
+
+      function checkFields() {
+        let name = document.getElementById("name").value.trim();
+        let email = document.getElementById("email").value.trim();
+        let role = document.getElementById("role").value;
+        let resumeContent = document.getElementById("resume_content").value.trim();
+
+        console.log("Checking fields: ", { name, email, role, resumeContent });
+
+        document.getElementById("submitBtn").disabled = !(name && email && role && resumeContent);
+      }
+
+      document.getElementById("name").addEventListener("input", checkFields);
+      document.getElementById("email").addEventListener("input", checkFields);
+      document.getElementById("role").addEventListener("change", checkFields);
+
+      // Intercept the form submission via AJAX
+      $("#applicantForm").on("submit", function(e) {
+        e.preventDefault();  // Prevent default submission behavior
+        
+        // Change button text to loading animation
+        let $submitBtn = $("#submitBtn");
+        $submitBtn.prop("disabled", true);
+        $submitBtn.html('<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Applying...');
+
+        let formData = {
+          name: $("#name").val().trim(),
+          email: $("#email").val().trim(),
+          role: $("#role").val().trim(),
+          resume_content: $("#resume_content").val().trim()
+        };
+
+        $.ajax({
+          url: $(this).attr("action"),
+          method: "POST",
+          data: formData,
+          success: function(response) {
+            alert(response.message);
+            // Optionally, you can reload the page after successful submission
+            location.reload();
+          },
+          error: function(xhr) {
+            let errMsg = xhr.responseJSON.error || "Application submission failed.";
+            alert("Error: " + errMsg);
+            // Reset the button in case of error
+            $submitBtn.prop("disabled", false);
+            $submitBtn.html('Submit');
+          }
+        });
+      });
+    });
+
+    document.addEventListener("DOMContentLoaded", function () {
+      document.getElementById("role").addEventListener("change", function(){
+        let selectedOption = this.options[this.selectedIndex];
+        let jobDesc = selectedOption.getAttribute("data-jd");
+
+        let jdContainer = document.getElementById("jobDescriptionContainer");
+        let jdContent = document.getElementById("jobDescription");
+
+        if(jobDesc) {
+          jdContent.innerHTML = jobDesc;
+          jdContainer.style.display = "block";
+        } else {
+          jdContent.innerHTML = "";
+          jdContainer.style.display = "none";
+        }
+      });
+    });
+  </script>
+</body>
+</html>
