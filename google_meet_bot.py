@@ -111,12 +111,20 @@ def save_to_db(applicant_id, history):
         print(f"❌ Error saving caption to MongoDB: {e}")
 
 def capture_captions(driver, applicant_id, duration=3600):
-    
     print("✅ Starting caption capture loop...")
     start_time = time.time()
     seen_caption_texts = set()
 
-    while time.time() - start_time < duration:
+    while True:
+        # Stop if meeting ends or tab is redirected
+        if "meet.google.com" not in driver.current_url:
+            print("⚠️ Meeting seems to have ended or you left the call.")
+            break
+
+        if time.time() - start_time > duration:
+            print("⏱️ Max duration reached, ending capture.")
+            break
+
         try:
             blocks = driver.find_elements(By.XPATH, "//div[contains(@class, 'nMcdL')]")
 
@@ -133,19 +141,13 @@ def capture_captions(driver, applicant_id, duration=3600):
 
                     caption_key = f"{speaker}:{caption}"
                     if caption_key in seen_caption_texts:
-                        continue  # Already processed
+                        continue
 
                     seen_caption_texts.add(caption_key)
-
-                    print("---------------------------------------------------------------")
-                    print(f"Speaker: {speaker},\n Caption: {caption}")
-                    print(f"History: {conversation_history}")
-                    print("---------------------------------------------------------------")
 
                     last_caption = conversation_history[-1]["caption"] if conversation_history else None
                     last_speaker = conversation_history[-1]["speaker"] if conversation_history else None
 
-                    # Only store if different from the last entry (either speaker or caption)
                     if speaker and (caption != last_caption or speaker != last_speaker):
                         caption_data = {
                             "applicant_id": applicant_id,
@@ -156,7 +158,7 @@ def capture_captions(driver, applicant_id, duration=3600):
                         conversation_history.append(caption_data)
                         print("✅ Stored caption:", caption_data)
 
-                    time.sleep(0.5)  # Delay slightly to reduce CPU usage
+                    time.sleep(0.5)
 
                 except Exception:
                     continue
