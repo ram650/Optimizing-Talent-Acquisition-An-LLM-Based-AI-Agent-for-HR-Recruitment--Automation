@@ -1,4 +1,3 @@
-import re
 from selenium.webdriver.chrome.options import Options
 import time
 import os
@@ -6,15 +5,12 @@ import pickle
 from datetime import datetime, timezone
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
-from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
-from google.oauth2.credentials import Credentials
 from pymongo import MongoClient
 from dotenv import load_dotenv
 import time
@@ -214,7 +210,7 @@ def run_meet_bot(meeting_link, applicant_id, duration_seconds=3600):
     ensure_captions_enabled(driver)
     print("✅ Captions enabled")
     capture_captions(driver,applicant_id, duration_seconds)
-    print("✅ Leaving meeting...")
+    print("✅ Exitting...")
     driver.quit()
     cleaned_history = clean_captions(conversation_history)
     print("Filtered Conversation:\n", cleaned_history)
