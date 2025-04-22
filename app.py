@@ -51,6 +51,7 @@ UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER")
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 CHROMA_PATH =os.getenv("CHROMA_PATH")
 SCOPES = ['https://www.googleapis.com/auth/calendar']
+groq_client = Groq(api_key=GROQ_API_KEY)
 
 try:
     client.admin.command('ping')
@@ -167,7 +168,6 @@ def apply():
         I want to format this text in a neat manner with spaces and new lines.
         Please remove all text formatting like bold and hash tags, etc.
         Return only the cleaned text."""
-        groq_client = Groq(api_key=GROQ_API_KEY)
         completion = groq_client.chat.completions.create(
             model=MODEL,
             messages=[{"role": "user", "content": prompt}],
@@ -616,6 +616,90 @@ def handle_send_email():
         send_email_gmail(sender_email, sender_password, recipient, subject, body)
 
     return jsonify({"success": True, "message": "Emails sent successfully!"}), 200
+
+@app.route('/summarize-interview', methods=['POST'])
+def summarize_interview():
+    data = request.get_json()
+    applicant_id = data.get('applicant_id')
+    if not applicant_id:
+        return jsonify({"error": "Missing applicant_id"}), 400
+
+    applicant = hrdb["applicants"].find_one({"_id": ObjectId(applicant_id)})
+    if not applicant:
+        return jsonify({"error": "Applicant not found"}), 404
+
+    existing = applicant.get("interview_summary")
+    if existing:
+        return jsonify(existing)
+
+    captions = applicant.get("meeting_captions", [])
+    if not captions:
+        return jsonify({"error": "No captions available to summarize."}), 400
+
+    transcript = "\n".join(f"{c['speaker']}: {c['caption']}" for c in captions)
+
+    score_prompt = f"""
+    You are an expert technical recruiter and talent evaluator. Below is the verbatim interview transcript:
+
+    {transcript}
+
+    ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+    CANDIDATE NAME: {applicant.get("name")}
+
+
+    Based solely on this transcript, produce an in-depth, recruitment-ready assessment. Your response should include clearly labeled, concise paragraphs covering:
+
+    1. Communication & Clarity: how well the candidate expressed ideas and answered questions.  
+    2. Technical Mastery: depth of understanding of concepts discussed.  
+    3. Problem-Solving & Critical Thinking: how they approached challenges.  
+    4. Soft Skills & Professionalism: confidence, adaptability, listening skills.  
+    5. Key Strengths: specific highlights.
+    6. Concerns or Gaps: areas needing improvement.
+
+    **IMPORTANT**: NOTE THAT THE PROVIDED TRANSCRIPT IS A DOWNLOADED CAPTION AND MAY CONTAIN ERRORS OR INACCURACIES, SO TRY TO MAKE OUT THE BEST OF IT, AS IT MAY NOT FULLY BE ACCURATE.
+    AN OVERALL SUMMARY IS SUFFICIENT, AND NO NEED TO GO INTO THE DETAILS OF EACH AND EVERY POINT DISCUSSED IN THE TRANSCRIPT.
+    ENSURE THAT THE MAIN HIGHLIGHTS AND MINUS POINTS OF THE CANDIDATE ARE CLEARLY MENTIONED.
+    STRICTLY DO NOT INCLUDE ANY EXAMPLE OR REFERENCES FROM THE TRANSCRIPT.
+    NEVER MENTION ANYTHING ABOUT THE TRANSCRIPTION OR ITS ERRORS, IF ANY, DO NOT TELL ABOUT IT.
+    Please ensure that the response is well-structured and easy to read, with clear headings for each section.
+
+    Return **only** that SUMMARY AS A JSON enclosed in triple backticks followed by the word json, and no other explanatory text or text of any kind, no extra commentary.
+    Here is the json format:
+
+    ```json
+   {{
+        "communication_clarity": "<text>",
+        "technical_mastery": "<text>",
+        "problem_solving": "<text>",
+        "soft_skills": "<text>",
+        "key_strengths": ["<strength 1>", "<strength 2>", "<strength 3>"],
+        "concerns_gaps": ["<concern 1>", "<concern 2>"]
+    }}
+    ```
+
+    Note that each field must give detailed information and be a complete sentence, and all fields must be included even if values are empty.
+    Ensure JSON is valid and properly formatted.
+    """
+
+    completion = groq_client.chat.completions.create(
+        model=MODEL,
+        messages=[{"role": "user", "content": score_prompt}],
+        temperature=0.5,
+        max_completion_tokens=4096,
+        top_p=0.95,
+        stream=False,
+    )
+    summary = completion.choices[0].message.content.strip()
+    print(f"Summary Result: {summary[7:-3]}")
+    parsed_summary = json.loads(summary[7:-3])
+    # 4) Save it back into MongoDB so subsequent calls just read it
+    hrdb["applicants"].update_one(
+        {"_id": ObjectId(applicant_id)},
+        {"$set": {"interview_summary": parsed_summary}}
+    )
+
+    return jsonify(parsed_summary)
 
 if __name__ == "__main__":
     app.run(debug=True)

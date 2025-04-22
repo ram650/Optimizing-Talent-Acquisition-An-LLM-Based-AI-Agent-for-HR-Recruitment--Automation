@@ -172,9 +172,7 @@
           <th>Name</th>
           <th>Email</th>
           <th>Role</th>
-          <th>Score</th>
-          <!-- <th>Reasons</th> -->
-          <!-- <th>Resume Filtering</th> -->
+          <th>Resume Score</th>
           <th>Approve for Interview</th>
         </tr>
       </thead>
@@ -184,24 +182,66 @@
   </div>
 
   <div class="modal fade" id="reasonsModal" tabindex="-1" aria-labelledby="reasonsModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-scrollable modal-lg">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
       <div class="modal-content">
+
         <div class="modal-header">
-          <h5 class="modal-title" id="reasonsModalLabel">Applicant Insights</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          <h5 class="modal-title" id="reasonsModalLabel">Candidate Analysis</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
+
         <div class="modal-body">
-          <div class="row">
+          <div class="row mb-3">
+            <h5>Resume Overview</h5>
+            <hr/>
             <div class="col-6">
-              <h6>Key Points</h6>
+              <h6>✅ Key Points</h6>
               <ul class="list-group" id="strengthsList"></ul>
             </div>
             <div class="col-6">
-              <h6>Lacking Points</h6>
+              <h6>❌ Lacking Points</h6>
               <ul class="list-group" id="lackingList"></ul>
             </div>
           </div>
+
+          <h5>Interview Summary</h5>
+          <hr/>
+
+          <div class="summary-section mb-3">
+            <h6 class="text-primary">Communication &amp; Clarity</h6>
+            <p id="commClarity" class="ps-2"></p>
+          </div>
+
+          <div class="summary-section mb-3">
+            <h6 class="text-primary">Technical Mastery</h6>
+            <p id="techMastery" class="ps-2"></p>
+          </div>
+
+          <div class="summary-section mb-3">
+            <h6 class="text-primary">Problem‑Solving &amp; Critical Thinking</h6>
+            <p id="problemSolving" class="ps-2"></p>
+          </div>
+
+          <div class="summary-section mb-3">
+            <h6 class="text-primary">Soft Skills &amp; Professionalism</h6>
+            <p id="softSkills" class="ps-2"></p>
+          </div>
+
+          <div class="summary-section mb-3">
+            <h6 class="text-primary">Key Strengths</h6>
+            <ul class="list-group ps-2" id="summaryKeyStrengths"></ul>
+          </div>
+
+          <div class="summary-section">
+            <h6 class="text-primary">Concerns &amp; Gaps</h6>
+            <ul class="list-group ps-2" id="summaryConcernsGaps"></ul>
+          </div>
         </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+
       </div>
     </div>
   </div>
@@ -286,17 +326,18 @@
       }
 
       // interview buttons/status
-      let action = "";
+      let action = "<div style='display: flex; justify-content: space-around;'>";
       if (applicant.round_1_results === "Approved") {
-        action = `<span class="status-approved">Approved</span>`;
+        action += `<span class="status-approved">Approved</span>`;
       } else if (applicant.round_1_results === "Rejected") {
-        action = `<span class="status-rejected">Rejected</span>`;
+        action += `<span class="status-rejected">Rejected</span>`;
       } else {
-        action = `
+        action += `
           <button class="btn btn-sm btn-approve approve-btn">Approve</button>
           <button class="btn btn-sm btn-reject reject-btn">Reject</button>
         `;
       }
+      action += "</div>";
 
       const $row = $(`
         <tr data-applicant-id="${applicant._id}">
@@ -326,35 +367,63 @@
     }
     
     $(document).on("click", "#applicantsTbody tr", function(e) {
-      // don’t trigger if a button inside the row was clicked
-      if ($(e.target).closest("button").length) return;
+  if ($(e.target).closest("button").length) return;
 
-      const id   = $(this).data("applicant-id");
-      const data = applicantDataMap[id] || { strengths: [], missing: [] };
+  const id   = $(this).data("applicant-id");
+  const data = applicantDataMap[id] || {};
 
-      // fill “Key Points”
-      const $str = $("#strengthsList").empty();
-      if (data.strengths.length) {
-        data.strengths.forEach(pt => {
-          $str.append(`<li class="list-group-item">${pt}</li>`);
-        });
-      } else {
-        $str.append(`<li class="list-group-item text-muted">No key points available.</li>`);
-      }
+  // Fill “Key Points”
+  const $str = $("#strengthsList").empty();
+  (data.strengths || []).length
+    ? data.strengths.forEach(pt => $str.append(`<li class="list-group-item">${pt}</li>`))
+    : $str.append(`<li class="list-group-item text-muted">No key points available.</li>`);
 
-      // fill “Lacking Points”
-      const $lack = $("#lackingList").empty();
-      if (data.missing.length) {
-        data.missing.forEach(pt => {
-          $lack.append(`<li class="list-group-item">${pt}</li>`);
-        });
-      } else {
-        $lack.append(`<li class="list-group-item text-muted">No lacking points noted.</li>`);
-      }
+  // Fill “Lacking Points”
+  const $lack = $("#lackingList").empty();
+  (data.missing || []).length
+    ? data.missing.forEach(pt => $lack.append(`<li class="list-group-item">${pt}</li>`))
+    : $lack.append(`<li class="list-group-item text-muted">No lacking points noted.</li>`);
 
-      // show modal
-      new bootstrap.Modal(document.getElementById("reasonsModal")).show();
-    });
+  // Clear previous summary to prevent showing stale info before AJAX completes
+  $("#commClarity, #techMastery, #problemSolving, #softSkills").text("Loading...");
+  $("#summaryKeyStrengths, #summaryConcernsGaps").empty().append(`<li class="list-group-item text-muted">Loading...</li>`);
+
+  // Show modal immediately with placeholders
+  const modal = new bootstrap.Modal(document.getElementById("reasonsModal"));
+  modal.show();
+
+  // Fetch updated summary
+  $.ajax({
+    url: "/summarize-interview",
+    type: "POST",
+    contentType: "application/json",
+    dataType: "json",  // ← ADD THIS
+    data: JSON.stringify({ applicant_id: id }),
+    success: function(resp) {
+      console.log("Summary response:", resp);  // 🪵 debug log
+
+      $("#commClarity").text(resp.communication_clarity || "—");
+      $("#techMastery").text(resp.technical_mastery || "—");
+      $("#problemSolving").text(resp.problem_solving || "—");
+      $("#softSkills").text(resp.soft_skills || "—");
+
+      const $ks = $("#summaryKeyStrengths").empty();
+      (resp.key_strengths || []).length
+        ? resp.key_strengths.forEach(pt => $ks.append(`<li class="list-group-item">${pt}</li>`))
+        : $ks.append(`<li class="list-group-item text-muted">None noted.</li>`);
+
+      const $cg = $("#summaryConcernsGaps").empty();
+      (resp.concerns_gaps || []).length
+        ? resp.concerns_gaps.forEach(pt => $cg.append(`<li class="list-group-item">${pt}</li>`))
+        : $cg.append(`<li class="list-group-item text-muted">None noted.</li>`);
+    },
+    error: function(xhr) {
+      console.error("Summary fetch failed", xhr);
+      $("#commClarity, #techMastery, #problemSolving, #softSkills").text("⚠️ Error loading summary.");
+      $("#summaryKeyStrengths, #summaryConcernsGaps").empty().append(`<li class="list-group-item text-danger">⚠️ Unable to load summary.</li>`);
+    }
+  });
+});
 
 
     // Modal schedule button click handler

@@ -100,7 +100,7 @@ def save_to_db(applicant_id, history):
     try:
         applicants_collection.update_one(
             {"_id": ObjectId(applicant_id)},
-            {"$set": {"meeting_captions": history}}
+            {"$push": {"meeting_captions": {"$each": history}}}
         )
         print("✅ Successfully saved caption history to database.")
     except Exception as e:
@@ -112,50 +112,37 @@ def capture_captions(driver, applicant_id, duration=3600):
     seen_caption_texts = set()
 
     while True:
-        # Stop if meeting ends or tab is redirected
-        if "meet.google.com" not in driver.current_url:
-            print("⚠️ Meeting seems to have ended or you left the call.")
-            break
-
-        if time.time() - start_time > duration:
-            print("⏱️ Max duration reached, ending capture.")
+        if driver.find_elements(By.XPATH, "//h1[normalize-space(.)='You left the meeting']") \
+        or driver.find_elements(By.XPATH, "//span[normalize-space(.)='Return to home screen']"):
+            print("⚠️ Detected ‘You left the meeting’ screen—stopping capture.")
             break
 
         try:
             blocks = driver.find_elements(By.XPATH, "//div[contains(@class, 'nMcdL')]")
-
             for block in blocks:
                 try:
-                    speaker_elem = block.find_element(By.XPATH, ".//span[contains(@class, 'NWpY1d')]")
-                    caption_elem = block.find_element(By.XPATH, ".//div[contains(@class, 'bh44bd')]")
-
-                    speaker = speaker_elem.text.strip()
-                    caption = caption_elem.text.strip()
-
+                    speaker = block.find_element(By.XPATH, ".//span[contains(@class,'NWpY1d')]").text.strip()
+                    caption = block.find_element(By.XPATH, ".//div[contains(@class,'bh44bd')]").text.strip()
                     if not caption:
                         continue
 
-                    caption_key = f"{speaker}:{caption}"
-                    if caption_key in seen_caption_texts:
+                    key = f"{speaker}:{caption}"
+                    if key in seen_caption_texts:
                         continue
+                    seen_caption_texts.add(key)
 
-                    seen_caption_texts.add(caption_key)
-
-                    last_caption = conversation_history[-1]["caption"] if conversation_history else None
-                    last_speaker = conversation_history[-1]["speaker"] if conversation_history else None
-
-                    if speaker and (caption != last_caption or speaker != last_speaker):
-                        caption_data = {
+                    last = conversation_history[-1] if conversation_history else {}
+                    if speaker != last.get("speaker") or caption != last.get("caption"):
+                        entry = {
                             "applicant_id": applicant_id,
                             "timestamp": datetime.now(timezone.utc).isoformat(),
                             "speaker": speaker,
                             "caption": caption
                         }
-                        conversation_history.append(caption_data)
-                        print("✅ Stored caption:", caption_data)
+                        conversation_history.append(entry)
+                        print("✅ Stored caption:", entry)
 
                     time.sleep(0.5)
-
                 except Exception:
                     continue
 
