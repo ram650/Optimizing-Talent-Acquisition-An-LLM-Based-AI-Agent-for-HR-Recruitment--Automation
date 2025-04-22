@@ -108,6 +108,10 @@
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
+    tr {
+      cursor: pointer;
+    }
+
   </style>
 </head>
 <body>
@@ -169,8 +173,8 @@
           <th>Email</th>
           <th>Role</th>
           <th>Score</th>
-          <th>Reasons</th>
-          <th>Resume Filtering</th>
+          <!-- <th>Reasons</th> -->
+          <!-- <th>Resume Filtering</th> -->
           <th>Approve for Interview</th>
         </tr>
       </thead>
@@ -179,9 +183,25 @@
     </table>
   </div>
 
+  <div class="modal fade" id="reasonsModal" tabindex="-1" aria-labelledby="reasonsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="reasonsModalLabel">Key Points</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <ul class="list-group" id="reasonsList"></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
   <script>
+    const applicantReasonsMap = {};
+
     const emailSelect = document.getElementById("emailSelect");
     let choicesInstance;
 
@@ -220,91 +240,98 @@
     let currentRowElement = null;
   
     // Fetch applicants when role selection changes
-    $("#roleSelect").on("change", function(){
-      let selectedRole = $(this).val();
+    $("#roleSelect").on("change", function() {
+      const role = $(this).val();
       $("#applicantsTbody").empty();
       $("#applicantsTable").show();
-  
       $.ajax({
         url: "/get-applicants",
         method: "GET",
-        data: { role: selectedRole },
-        success: function(response) {
-          if(response.applicants && response.applicants.length > 0){
-            response.applicants.forEach(function(applicant) {
-              addApplicantRow(applicant);
-            });
+        data: { role },
+        success(response) {
+          if (response.applicants.length) {
+            response.applicants.forEach(addApplicantRow);
           } else {
-            $("#applicantsTbody").append('<tr><td colspan="7" class="text-center">No applicants found.</td></tr>');
+            $("#applicantsTbody")
+              .append('<tr><td colspan="5" class="text-center">No applicants found.</td></tr>');
           }
         },
-        error: function(err) {
-          console.error("Error fetching applicants", err);
-          alert("Failed to fetch applicants.");
-        }
+        error() { alert("Failed to fetch applicants."); }
       });
     });
   
     // Function to add a row for each applicant
     function addApplicantRow(applicant) {
-      let resumeFilterBadge = "";
-      if(applicant.resume_filtering === "Approved") {
-        resumeFilterBadge = `<span class="status-approved">Approved</span>`;
-      } else if(applicant.resume_filtering === "Rejected") {
-        resumeFilterBadge = `<span class="status-rejected">Rejected</span>`;
+      // store reasons under their _id
+      applicantReasonsMap[applicant._id] = applicant.reasons || [];
+
+      // style score by resume_filtering
+      let score = applicant.score || "";
+      if (applicant.resume_filtering === "Approved") {
+        score = `<span class="status-approved">${score}</span>`;
+      } else if (applicant.resume_filtering === "Rejected") {
+        score = `<span class="status-rejected">${score}</span>`;
       }
-  
-      let interviewContent = "";
-      if(applicant.round_1_results === "Approved") {
-        interviewContent = `<span class="status-approved">Approved</span>`;
-      } else if(applicant.round_1_results === "Rejected") {
-        interviewContent = `<span class="status-rejected">Rejected</span>`;
+
+      // interview buttons/status
+      let action = "";
+      if (applicant.round_1_results === "Approved") {
+        action = `<span class="status-approved">Approved</span>`;
+      } else if (applicant.round_1_results === "Rejected") {
+        action = `<span class="status-rejected">Rejected</span>`;
       } else {
-        interviewContent = `
-          <button type="button" class="btn btn-sm btn-approve approve-btn">Approve</button><br/><br/>
-          <button type="button" class="btn btn-sm btn-reject reject-btn">Reject</button>
+        action = `
+          <button class="btn btn-sm btn-approve approve-btn">Approve</button>
+          <button class="btn btn-sm btn-reject reject-btn">Reject</button>
         `;
       }
-  
-      let reasonsHtml = "";
-      if(applicant.reasons && applicant.reasons.length > 0) {
-        reasonsHtml = "<ul>";
-        applicant.reasons.forEach(function(reason) {
-          reasonsHtml += `<li>${reason}</li>`;
-        });
-        reasonsHtml += "</ul>";
-      }
-  
-      let row = $(`
+
+      const $row = $(`
         <tr data-applicant-id="${applicant._id}">
           <td>${applicant.name}</td>
           <td>${applicant.email}</td>
           <td>${applicant.role}</td>
-          <td>${applicant.score || ''}</td>
-          <td><div class="reasons-container">${reasonsHtml}</div></td>
-          <td>${resumeFilterBadge}</td>
-          <td class="action-cell" style="text-align: center;">${interviewContent}</td>
+          <td>${score}</td>
+          <td class="action-cell text-center">${action}</td>
         </tr>
       `);
-  
-      if(!applicant.round_1_results) {
-        row.find(".approve-btn").on("click", function(){
-          currentApplicantId = applicant._id;
-          currentRowElement = row;
-          let scheduleModal = new bootstrap.Modal(document.getElementById("scheduleModal"));
-          let now = new Date().toISOString().slice(0,16);
-          $("#interviewDateTime").attr("min", now);
-          scheduleModal.show();
-        });
-  
-        row.find(".reject-btn").on("click", function(){
-          updateApplicantStatus(applicant._id, "Rejected", row);
-        });
-      }
-  
-      $("#applicantsTbody").append(row);
+
+      // bind approve/reject on those buttons
+      $row.find(".approve-btn").on("click", e => {
+        e.stopPropagation();
+        currentApplicantId = applicant._id;
+        currentRowElement = $row;
+        const now = new Date().toISOString().slice(0,16);
+        $("#interviewDateTime").attr("min", now);
+        new bootstrap.Modal($("#scheduleModal")).show();
+      });
+      $row.find(".reject-btn").on("click", e => {
+        e.stopPropagation();
+        updateApplicantStatus(applicant._id, "Rejected", $row);
+      });
+
+      $("#applicantsTbody").append($row);
     }
-  
+    
+    $(document).on("click", "#applicantsTbody tr", function(e) {
+      // if the click target was (or inside) a button, ignore
+      if ($(e.target).closest("button").length) return;
+
+      const id = $(this).data("applicant-id");
+      const reasons = applicantReasonsMap[id] || [];
+      const $ul = $("#reasonsList").empty();
+
+      if (reasons.length) {
+        reasons.forEach(r => {
+          $ul.append(`<li class="list-group-item">${r}</li>`);
+        });
+      } else {
+        $ul.append(`<li class="list-group-item text-muted">No reasons available.</li>`);
+      }
+
+      new bootstrap.Modal(document.getElementById("reasonsModal")).show();
+    });
+
     // Modal schedule button click handler
     $("#scheduleBtn").on("click", function(){
       let selectedEmails = $("#emailSelect").val();

@@ -584,4 +584,4 @@ def handle_send_email():
     return jsonify({"success": True, "message": "Emails sent successfully!"}), 200
 
 if __name__ == "__main__":
-    app.run(debug=False)
+    app.run(debug=True)
