@@ -3,10 +3,6 @@ pymongo
 bson
 fitz
 groq
-tempfile
-json
-smtplib
-email
 playwright
 asyncio
 apscheduler
