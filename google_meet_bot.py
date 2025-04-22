@@ -169,7 +169,7 @@ def run_meet_bot(meeting_link, applicant_id, duration_seconds=3600):
     options = Options()
     options.binary_location = chrome_binary_path
     options.add_argument(f"--user-data-dir={user_data_dir}")  # Use your local Chrome data
-    options.add_argument("--profile-directory=Profile 2")  # Or 'Profile 1', etc.
+    options.add_argument(f"--profile-directory={os.getenv('CHROME_PROFILE')}")  # Or 'Profile 1', etc.
     options.add_argument("--disable-notifications")
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option('useAutomationExtension', False)

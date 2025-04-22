@@ -419,8 +419,8 @@
     },
     error: function(xhr) {
       console.error("Summary fetch failed", xhr);
-      $("#commClarity, #techMastery, #problemSolving, #softSkills").text("⚠️ Error loading summary.");
-      $("#summaryKeyStrengths, #summaryConcernsGaps").empty().append(`<li class="list-group-item text-danger">⚠️ Unable to load summary.</li>`);
+      $("#commClarity, #techMastery, #problemSolving, #softSkills").text("-");
+      $("#summaryKeyStrengths, #summaryConcernsGaps").empty().append(`<li class="list-group-item text-danger">-</li>`);
     }
   });
 });
