@@ -227,7 +227,7 @@ def submit_applicant():
 
         jd = role_doc.get("JD", "")
         weights_dict = role_doc.get("weights", {})
-        threshold = 70
+        threshold = 60
 
         score_prompt = f"""This is the desired job description:
             '{jd}'
@@ -244,15 +244,42 @@ def submit_applicant():
             Do not search for exact words in the job description, but analyse the contents of the weightage as well as the resume contents thoroughly and check if it might be relevant to the topic in the weightage.
             Consider only the points that are relevant to the job description and weightage topics for providing the reasons. 
             Return only the following as a json text:
-             {{
-                status: Approved or Rejected,
-                score: the score of  the resume after analyzing and comparing with the job description and the weights.
-                resons: [reson1, reson2, ...]
-             }}
+            {{
+                "resume_score": <integer (0-100)>,
+                "recommendation": "<Approved/Rejected>",
+                "key_strengths: ["<strength 1>", "<strength 2>", "<strength 3>"],
+                "missing_requirements": ["<missing requirement 1>", "<missing requirement 2>"],
+                "skill_scores": [
+                    {{
+                        "skill": "<skill name>",
+                        "score": <integer (0-100)>,
+                        "required": <integer (0-100)>,
+                        "category": "<category name>"
+                    }}
+                ],
+                "category_scores": [
+                    {{
+                        "category": "<category name>",
+                        "score": <integer (0-100)>,
+                        "weight": <integer (0-100)>
+                    }}
+                ]
+            }}
+
+            Guidelines:
+            1. Basic info must include name, email, overall score, and recommendation and (Ensure that Key strengths and missing requirements should be aligned with job requirements.)
+            2. Skills should be evaluated individually with scores compared to job requirements
+            3. Categorize skills into groups like "Technical", "Soft Skills", etc., based on the resume content. Don't stick to only these, adapt as required.
+            4. Calculate category scores as weighted averages of skill scores in each category that has been provided in the weightage list.
+            5. Score breakdown should include main components of the overall score (e.g., Skills, Experience, Education)
+            6. Make sure that the keypoints and missing requirements are complete sentences and are relevant to the job description and weightage topics.
+            7. All fields must be included even if values are empty
+            8. Ensure JSON is valid and properly formatted
+            9. Return just the json enclosed within triple backticks followed by the word json, and no other explanatory text or text of any kind.
         """
         groq_client = Groq(api_key=GROQ_API_KEY)
         completion = groq_client.chat.completions.create(
-            model="qwen-2.5-32b",
+            model=MODEL,
             messages=[{"role": "user", "content": score_prompt}],
             temperature=0.5,
             max_completion_tokens=4096,
@@ -260,16 +287,20 @@ def submit_applicant():
             stream=False,
         )
         result = completion.choices[0].message.content
-        print(result[8:-3])
-        score_result = json.loads(result[8:-3])
+        print(f"\n\n\nScore Result: {result[7:-3]}")
+        # print(result[8:-3])
+        score_result = json.loads(result[7:-3])
         applicant = {
             "name": name,
             "email": email,
             "role": role,
             "resume_content": resume_content,
-            "score": score_result["score"],
-            "reasons": score_result["reasons"],
-            "resume_filtering": score_result["status"]
+            "score": score_result["resume_score"],
+            "key_strengths": score_result["key_strengths"],
+            "missing_requirements": score_result["missing_requirements"],
+            "skill_scores": score_result["skill_scores"],
+            "category_scores": score_result["category_scores"],
+            "resume_filtering": score_result["recommendation"]
         }
 
         hrdb["applicants"].insert_one(applicant)
@@ -281,10 +312,13 @@ def submit_applicant():
             "name": name,
             "email": email,
             "role": role,
-            "resume_content": resume_content[200],
-            "score": score_result["score"],
-            "reasons": score_result["reasons"],
-            "resume_filtering": score_result["status"]
+            "resume_content": resume_content,
+            "score": score_result["resume_score"],
+            "key_strengths": score_result["key_strengths"],
+            "missing_requirements": score_result["missing_requirements"],
+            "skill_scores": score_result["skill_scores"],
+            "category_scores": score_result["category_scores"],
+            "resume_filtering": score_result["recommendation"]
         })
     
     except Exception as e:
@@ -319,7 +353,7 @@ def enhance_role():
 
         groq_client = Groq(api_key=GROQ_API_KEY)
         completion = groq_client.chat.completions.create(
-            model="qwen-2.5-32b",
+            model=MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.5,
             max_completion_tokens=4096,
