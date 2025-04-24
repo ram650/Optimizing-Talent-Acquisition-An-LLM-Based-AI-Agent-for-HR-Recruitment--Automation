@@ -375,6 +375,7 @@ def publish_role():
     try:
         data = request.get_json()
         role_name = data.get('role_name')
+        salary_package = data.get('salary_package')
         job_description = data.get('job_description')
         weights = data.get('weights')
         
@@ -383,6 +384,7 @@ def publish_role():
 
         role_doc = {
             "Role": role_name,
+            "Salary_package": salary_package,
             "JD": job_description,
             "Weights": weights
         }
