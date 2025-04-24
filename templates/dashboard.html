@@ -202,45 +202,10 @@
               <h6>❌ Lacking Points</h6>
               <ul class="list-group" id="lackingList"></ul>
             </div>
-          </div>
-
-          <!-- <h5>Interview Summary</h5>
-          <hr/>
-
-          <div class="summary-section mb-3">
-            <h6 class="text-primary">Communication &amp; Clarity</h6>
-            <p id="commClarity" class="ps-2"></p>
-          </div>
-
-          <div class="summary-section mb-3">
-            <h6 class="text-primary">Technical Mastery</h6>
-            <p id="techMastery" class="ps-2"></p>
-          </div>
-
-          <div class="summary-section mb-3">
-            <h6 class="text-primary">Problem‑Solving &amp; Critical Thinking</h6>
-            <p id="problemSolving" class="ps-2"></p>
-          </div>
-
-          <div class="summary-section mb-3">
-            <h6 class="text-primary">Soft Skills &amp; Professionalism</h6>
-            <p id="softSkills" class="ps-2"></p>
-          </div>
-
-          <div class="summary-section mb-3">
-            <h6 class="text-primary">Key Strengths</h6>
-            <ul class="list-group ps-2" id="summaryKeyStrengths"></ul>
-          </div>
-
-          <div class="summary-section">
-            <h6 class="text-primary">Concerns &amp; Gaps</h6>
-            <ul class="list-group ps-2" id="summaryConcernsGaps"></ul>
-          </div>
-        </div> -->
-
-        
+          </div>        
       </div>
       <div class="modal-footer">
+        <button type="button" id="scheduleInterviewBtn" class="btn btn-primary">Schedule Interview</button>
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
       </div>
     </div>
@@ -249,6 +214,33 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
   <script>
+    $(document).on("click", "#scheduleInterviewBtn", function () {
+      if (!currentApplicantId) {
+        alert("Invalid applicant ID");
+        return;
+      }
+
+      const now = new Date().toISOString().slice(0, 16);
+      $("#interviewDateTime").attr("min", now);
+      $("#interviewDateTime").val(""); // Reset previous time
+      $("#emailSelect").val("");       // Reset previous selection
+
+      fetchInterviewers(); // Populate interviewers dropdown
+
+      // Hide reasons modal before showing schedule modal
+      const reasonsModalEl = document.getElementById("reasonsModal");
+      const reasonsModal = bootstrap.Modal.getInstance(reasonsModalEl);
+      reasonsModal.hide();
+
+      // After a short delay, show schedule modal to ensure the backdrop doesn't conflict
+      setTimeout(() => {
+        const scheduleModal = new bootstrap.Modal(document.getElementById("scheduleModal"));
+        scheduleModal.show();
+      }, 300); // Delay lets the backdrop clear out cleanly
+    });
+
+
+
     const applicantDataMap = {};
 
     const emailSelect = document.getElementById("emailSelect");
@@ -370,6 +362,8 @@
   if ($(e.target).closest("button").length) return;
 
   const id   = $(this).data("applicant-id");
+  currentApplicantId = id; // Set current ID globally for scheduling
+
   const data = applicantDataMap[id] || {};
 
   // Fill “Key Points”
