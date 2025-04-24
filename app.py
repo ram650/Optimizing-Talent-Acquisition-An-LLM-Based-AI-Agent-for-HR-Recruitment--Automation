@@ -25,12 +25,12 @@ import pytz
 scheduler = BackgroundScheduler()
 scheduler.start()
 
-def schedule_bot(meeting_link, applicant_id, run_time, duration):
+def schedule_bot(meeting_link, applicant_id, run_time, interview_no, duration):
     scheduler.add_job(
         func=bot.run_meet_bot,
         trigger='date',
         run_date=run_time,
-        args=[meeting_link, applicant_id, duration*60]
+        args=[meeting_link, applicant_id, interview_no, duration*60]
     )
     print(f"Scheduled the bot to run at {run_time}")
 
@@ -472,10 +472,12 @@ def schedule_interview():
     if not applicant_id or not interview_datetime:
         return jsonify({"error": "Missing required data"}), 400
 
-    # 1. Fetch the applicant
     applicant = hrdb["applicants"].find_one({"_id": ObjectId(applicant_id)})
     if not applicant:
         return jsonify({"error": "Applicant not found"}), 404
+
+    # Calculate interview count and next interview number
+    no_of_interviews = applicant.get("no_of_interviews", 0) + 1
 
     local_time = datetime.strptime(interview_datetime, "%Y-%m-%dT%H:%M")
     local_tz = pytz.timezone("Asia/Kolkata")
@@ -503,15 +505,22 @@ def schedule_interview():
         send_email_gmail(SENDER_EMAIL, SENDER_PASSWORD, receiver_email, subject, body)
 
     # 4. Update the applicant record
+    interview_doc = {
+        "applicant_id": ObjectId(applicant_id),
+        "interview_no": no_of_interviews,
+        "interview_datetime": interview_datetime,
+        "meeting_link": meet_link,
+        "meeting_captions": [],
+        "interview_summary": {}
+    }
+    hrdb["interviews"].insert_one(interview_doc)
+
+    # Update applicant: increment interview count
     hrdb["applicants"].update_one(
         {"_id": ObjectId(applicant_id)},
-        {"$set": {
-            "round_1_results": "Approved",
-            "interview_datetime": interview_datetime,
-            "meeting_link": meet_link
-        }}
+        {"$set": {"no_of_interviews": no_of_interviews,"round_1_results": "Approved"}}
     )
-    schedule_bot(meet_link, applicant_id, datetime.fromisoformat(interview_datetime), 1)
+    schedule_bot(meet_link, applicant_id, datetime.fromisoformat(interview_datetime), no_of_interviews, 1)
     return jsonify({"message": "Interview scheduled", "meet_link": meet_event.get("hangoutLink")})
 
 @app.route('/craft-questions')
@@ -622,7 +631,8 @@ def handle_send_email():
 @app.route('/summarize-interview', methods=['POST'])
 def summarize_interview():
     data = request.get_json()
-    applicant_id = data.get('applicant_id')
+    applicant_id = data.get("applicant_id")
+
     if not applicant_id:
         return jsonify({"error": "Missing applicant_id"}), 400
 
@@ -630,78 +640,117 @@ def summarize_interview():
     if not applicant:
         return jsonify({"error": "Applicant not found"}), 404
 
-    existing = applicant.get("interview_summary")
-    if existing:
-        return jsonify(existing)
+    no_of_interviews = applicant.get("no_of_interviews", 0)
+    if no_of_interviews == 0:
+        return jsonify({"error": "No interviews found for this applicant"}), 400
 
-    captions = applicant.get("meeting_captions", [])
-    if not captions:
-        return jsonify({"error": "No captions available to summarize."}), 400
+    all_summaries = []
 
-    transcript = "\n".join(f"{c['speaker']}: {c['caption']}" for c in captions)
+    for interview_no in range(1, no_of_interviews + 1):
+        print(interview_no)
+        interview = hrdb["interviews"].find_one({
+            "applicant_id": ObjectId(applicant_id),
+            "interview_no": interview_no
+        })
 
-    score_prompt = f"""
-    You are an expert technical recruiter and talent evaluator. Below is the verbatim interview transcript:
+        if not interview:
+            print(f"Interview {interview_no} not found.")
+            continue
 
-    {transcript}
+        captions = interview.get("meeting_captions")
+        if not captions:
+            print(f"Interview {interview_no} has no captions.")
+            continue
 
-    ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+        # If summary already exists, use it
+        existing_summary = interview.get("interview_summary")
+        if existing_summary:
+            print(f"Interview {interview_no} already summarized. Using existing summary.")
+            all_summaries.append({
+                "interview_no": interview_no,
+                "summary": existing_summary
+            })
+            continue
 
-    CANDIDATE NAME: {applicant.get("name")}
+        # Generate summary from captions
+        transcript = "\n".join(f"{c['speaker']}: {c['caption']}" for c in captions)
 
+        score_prompt = f"""
+        You are an expert technical recruiter and talent evaluator. Below is the verbatim interview transcript:
 
-    Based solely on this transcript, produce an in-depth, recruitment-ready assessment. Your response should include clearly labeled, concise paragraphs covering:
+        {transcript}
 
-    1. Communication & Clarity: how well the candidate expressed ideas and answered questions.  
-    2. Technical Mastery: depth of understanding of concepts discussed.  
-    3. Problem-Solving & Critical Thinking: how they approached challenges.  
-    4. Soft Skills & Professionalism: confidence, adaptability, listening skills.  
-    5. Key Strengths: specific highlights.
-    6. Concerns or Gaps: areas needing improvement.
+        ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-    **IMPORTANT**: NOTE THAT THE PROVIDED TRANSCRIPT IS A DOWNLOADED CAPTION AND MAY CONTAIN ERRORS OR INACCURACIES, SO TRY TO MAKE OUT THE BEST OF IT, AS IT MAY NOT FULLY BE ACCURATE.
-    AN OVERALL SUMMARY IS SUFFICIENT, AND NO NEED TO GO INTO THE DETAILS OF EACH AND EVERY POINT DISCUSSED IN THE TRANSCRIPT.
-    ENSURE THAT THE MAIN HIGHLIGHTS AND MINUS POINTS OF THE CANDIDATE ARE CLEARLY MENTIONED.
-    STRICTLY DO NOT INCLUDE ANY EXAMPLE OR REFERENCES FROM THE TRANSCRIPT.
-    NEVER MENTION ANYTHING ABOUT THE TRANSCRIPTION OR ITS ERRORS, IF ANY, DO NOT TELL ABOUT IT.
-    Please ensure that the response is well-structured and easy to read, with clear headings for each section.
+        CANDIDATE NAME: {applicant.get("name")}
+        Only {applicant.get("name")} is the candidate and the other participants are all interviewers, so please analyze and review only the candidate's performance in the interview.
 
-    Return **only** that SUMMARY AS A JSON enclosed in triple backticks followed by the word json, and no other explanatory text or text of any kind, no extra commentary.
-    Here is the json format:
+        Based solely on this transcript, produce an in-depth, recruitment-ready assessment. Your response should include clearly labeled, concise paragraphs covering:
 
-    ```json
-   {{
-        "communication_clarity": "<text>",
-        "technical_mastery": "<text>",
-        "problem_solving": "<text>",
-        "soft_skills": "<text>",
-        "key_strengths": ["<strength 1>", "<strength 2>", "<strength 3>"],
-        "concerns_gaps": ["<concern 1>", "<concern 2>"]
-    }}
-    ```
+        1. Communication & Clarity: how well the candidate expressed ideas and answered questions.  
+        2. Technical Mastery: depth of understanding of concepts discussed.  
+        3. Problem-Solving & Critical Thinking: how they approached challenges.  
+        4. Soft Skills & Professionalism: confidence, adaptability, listening skills.  
+        5. Key Strengths: specific highlights.
+        6. Concerns or Gaps: areas needing improvement.
 
-    Note that each field must give detailed information and be a complete sentence, and all fields must be included even if values are empty.
-    Ensure JSON is valid and properly formatted.
-    """
+        **IMPORTANT**: NOTE THAT THE PROVIDED TRANSCRIPT IS A DOWNLOADED CAPTION AND MAY CONTAIN ERRORS OR INACCURACIES, SO TRY TO MAKE OUT THE BEST OF IT, AS IT MAY NOT FULLY BE ACCURATE.
+        AN OVERALL SUMMARY IS SUFFICIENT, AND NO NEED TO GO INTO THE DETAILS OF EACH AND EVERY POINT DISCUSSED IN THE TRANSCRIPT.
+        ENSURE THAT THE MAIN HIGHLIGHTS AND MINUS POINTS OF THE CANDIDATE ARE CLEARLY MENTIONED.
+        STRICTLY DO NOT INCLUDE ANY EXAMPLE OR REFERENCES FROM THE TRANSCRIPT.
+        NEVER MENTION ANYTHING ABOUT THE TRANSCRIPTION OR ITS ERRORS, IF ANY, DO NOT TELL ABOUT IT.
+        Please ensure that the response is well-structured and easy to read, with clear headings for each section.
 
-    completion = groq_client.chat.completions.create(
-        model=MODEL,
-        messages=[{"role": "user", "content": score_prompt}],
-        temperature=0.5,
-        max_completion_tokens=4096,
-        top_p=0.95,
-        stream=False,
-    )
-    summary = completion.choices[0].message.content.strip()
-    print(f"Summary Result: {summary[7:-3]}")
-    parsed_summary = json.loads(summary[7:-3])
-    # 4) Save it back into MongoDB so subsequent calls just read it
-    hrdb["applicants"].update_one(
-        {"_id": ObjectId(applicant_id)},
-        {"$set": {"interview_summary": parsed_summary}}
-    )
+        Return **only** that SUMMARY AS A JSON enclosed in triple backticks followed by the word json, and no other explanatory text or text of any kind, no extra commentary.
+        Here is the json format:
 
-    return jsonify(parsed_summary)
+        ```json
+        {{
+            "communication_clarity": "<text>",
+            "technical_mastery": "<text>",
+            "problem_solving": "<text>",
+            "soft_skills": "<text>",
+            "key_strengths": ["<strength 1>", "<strength 2>", "<strength 3>"],
+            "concerns_gaps": ["<concern 1>", "<concern 2>"]
+        }}
+        ```
+
+        Note that each field must give detailed information and be a complete sentence, and all fields must be included even if values are empty.
+        Ensure JSON is valid and properly formatted.
+        """
+
+        completion = groq_client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "user", "content": score_prompt}],
+            temperature=0.5,
+            max_completion_tokens=4096,
+            top_p=0.95,
+            stream=False,
+        )
+
+        summary = completion.choices[0].message.content.strip()
+
+        try:
+            json_data = summary[7:-3]
+            parsed_summary = json.loads(json_data)
+        except Exception as e:
+            print(f"Error parsing summary for interview {interview_no}: {e}")
+            print("Raw response was:", summary)
+            continue
+
+        # Save back into DB
+        hrdb["interviews"].update_one(
+            {"_id": interview["_id"]},
+            {"$set": {"interview_summary": parsed_summary}}
+        )
+
+        all_summaries.append({
+            "interview_no": interview_no,
+            "summary": parsed_summary
+        })
+    print("All summaries to be sent to frontend:", all_summaries)
+
+    return jsonify(all_summaries)
 
 if __name__ == "__main__":
     app.run(debug=True)

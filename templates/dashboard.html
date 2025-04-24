@@ -204,7 +204,7 @@
             </div>
           </div>
 
-          <h5>Interview Summary</h5>
+          <!-- <h5>Interview Summary</h5>
           <hr/>
 
           <div class="summary-section mb-3">
@@ -236,12 +236,12 @@
             <h6 class="text-primary">Concerns &amp; Gaps</h6>
             <ul class="list-group ps-2" id="summaryConcernsGaps"></ul>
           </div>
-        </div>
+        </div> -->
 
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-        </div>
-
+        
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
       </div>
     </div>
   </div>
@@ -400,23 +400,54 @@
     dataType: "json",  // ← ADD THIS
     data: JSON.stringify({ applicant_id: id }),
     success: function(resp) {
-      console.log("Summary response:", resp);  // 🪵 debug log
+  console.log("Summary response:", resp); // 🪵 debug log
 
-      $("#commClarity").text(resp.communication_clarity || "—");
-      $("#techMastery").text(resp.technical_mastery || "—");
-      $("#problemSolving").text(resp.problem_solving || "—");
-      $("#softSkills").text(resp.soft_skills || "—");
+  // Clear old interview summaries
+  const container = $("#reasonsModal .modal-body");
+  container.find(".dynamic-summary").remove();
 
-      const $ks = $("#summaryKeyStrengths").empty();
-      (resp.key_strengths || []).length
-        ? resp.key_strengths.forEach(pt => $ks.append(`<li class="list-group-item">${pt}</li>`))
-        : $ks.append(`<li class="list-group-item text-muted">None noted.</li>`);
+  // Loop through interviews array
+  (resp || []).forEach((entry) => {
+    const interview = entry.summary;
+    const iNum = entry.interview_no;
 
-      const $cg = $("#summaryConcernsGaps").empty();
-      (resp.concerns_gaps || []).length
-        ? resp.concerns_gaps.forEach(pt => $cg.append(`<li class="list-group-item">${pt}</li>`))
-        : $cg.append(`<li class="list-group-item text-muted">None noted.</li>`);
-    },
+    const html = `
+      <div class="dynamic-summary">
+        <h5>Interview ${iNum} Summary</h5>
+        <hr/>
+        <div class="summary-section mb-3">
+          <h6 class="text-primary">Communication &amp; Clarity</h6>
+          <p class="ps-2">${interview.communication_clarity || "—"}</p>
+        </div>
+        <div class="summary-section mb-3">
+          <h6 class="text-primary">Technical Mastery</h6>
+          <p class="ps-2">${interview.technical_mastery || "—"}</p>
+        </div>
+        <div class="summary-section mb-3">
+          <h6 class="text-primary">Problem‑Solving &amp; Critical Thinking</h6>
+          <p class="ps-2">${interview.problem_solving || "—"}</p>
+        </div>
+        <div class="summary-section mb-3">
+          <h6 class="text-primary">Soft Skills &amp; Professionalism</h6>
+          <p class="ps-2">${interview.soft_skills || "—"}</p>
+        </div>
+        <div class="summary-section mb-3">
+          <h6 class="text-primary">Key Strengths</h6>
+          <ul class="list-group ps-2">
+            ${interview.key_strengths?.map(pt => `<li class="list-group-item">${pt}</li>`).join("") || `<li class="list-group-item text-muted">None noted.</li>`}
+          </ul>
+        </div>
+        <div class="summary-section mb-4">
+          <h6 class="text-primary">Concerns &amp; Gaps</h6>
+          <ul class="list-group ps-2">
+            ${interview.concerns_gaps?.map(pt => `<li class="list-group-item">${pt}</li>`).join("") || `<li class="list-group-item text-muted">None noted.</li>`}
+          </ul>
+        </div>
+      </div>
+    `;
+    container.append(html);
+  });
+},
     error: function(xhr) {
       console.error("Summary fetch failed", xhr);
       $("#commClarity, #techMastery, #problemSolving, #softSkills").text("-");

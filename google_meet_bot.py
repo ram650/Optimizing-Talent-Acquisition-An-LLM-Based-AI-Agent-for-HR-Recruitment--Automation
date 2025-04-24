@@ -96,15 +96,21 @@ def ensure_captions_enabled(driver):
     except Exception as e:
         print("❌ Error ensuring captions:", e)
 
-def save_to_db(applicant_id, history):
+def save_to_db(applicant_id, interview_no, history):
     try:
-        applicants_collection.update_one(
-            {"_id": ObjectId(applicant_id)},
-            {"$push": {"meeting_captions": {"$each": history}}}
+        hrdb["interviews"].update_one(
+            {
+                "applicant_id": ObjectId(applicant_id),
+                "interview_no": interview_no
+            },
+            {
+                "$push": {"meeting_captions": {"$each": history}}
+            }
         )
-        print("✅ Successfully saved caption history to database.")
+        print(f"✅ Successfully saved captions to interview {interview_no}.")
     except Exception as e:
-        print(f"❌ Error saving caption to MongoDB: {e}")
+        print(f"❌ Error saving captions to MongoDB: {e}")
+
 
 def capture_captions(driver, applicant_id, duration=3600):
     print("✅ Starting caption capture loop...")
@@ -162,7 +168,7 @@ def clean_captions(history):
     return cleaned
 
 
-def run_meet_bot(meeting_link, applicant_id, duration_seconds=3600):
+def run_meet_bot(meeting_link, applicant_id, interview_no, duration_seconds=3600):
     chrome_binary_path = r'C:\Program Files\Google\Chrome\Application\chrome.exe'  # Adjust if needed
     user_data_dir = r'C:\Users\IrfaanFareedA\AppData\Local\Google\Chrome\User Data'  # Your actual path
 
@@ -201,7 +207,7 @@ def run_meet_bot(meeting_link, applicant_id, duration_seconds=3600):
     driver.quit()
     cleaned_history = clean_captions(conversation_history)
     print("Filtered Conversation:\n", cleaned_history)
-    save_to_db(applicant_id, cleaned_history)
+    save_to_db(applicant_id, interview_no, cleaned_history)
     return cleaned_history
 
 
