@@ -191,6 +191,17 @@
         </div>
 
         <div class="modal-body">
+          <div class="row mb-4">
+            <div class="col-md-6">
+              <h6 class="text-center">Skill Scores</h6>
+              <canvas id="skillChart"></canvas>
+            </div>
+            <div class="col-md-6">
+              <h6 class="text-center">Category Breakdown</h6>
+              <canvas id="categoryChart"></canvas>
+            </div>
+          </div>
+
           <div class="row mb-3">
             <h5>Resume Overview</h5>
             <hr/>
@@ -305,8 +316,10 @@
     function addApplicantRow(applicant) {
       // store reasons under their _id
       applicantDataMap[applicant._id] = {
-        strengths: applicant.key_strengths || [],
-        missing:   applicant.missing_requirements || []
+        strengths:   applicant.key_strengths || [],
+        missing:     applicant.missing_requirements || [],
+        skills:      applicant.skill_scores      || [],
+        categories:  applicant.category_scores   || []
       };
 
       // style score by resume_filtering
@@ -395,6 +408,52 @@
     data: JSON.stringify({ applicant_id: id }),
     success: function(resp) {
   console.log("Summary response:", resp); // 🪵 debug log
+  // 1) grab the raw arrays we stashed:
+const raw = applicantDataMap[id];
+const skillLabels = raw.skills.map(s => s.skill);
+const skillValues = raw.skills.map(s => s.score);
+const catLabels   = raw.categories.map(c => c.category);
+const catValues   = raw.categories.map(c => c.score);
+
+// 2) if you want to destroy old charts, keep references:
+if (window._skillChart)  window._skillChart .destroy();
+if (window._categoryChart) window._categoryChart.destroy();
+
+// 3) draw the bar chart:
+window._skillChart = new Chart(
+  document.getElementById('skillChart').getContext('2d'),
+  {
+    type: 'bar',
+    data: {
+      labels: skillLabels,
+      datasets: [{
+        label: 'Score',
+        data: skillValues,
+        // Chart.js will pick defaults; we won’t hard-code colors
+      }]
+    },
+    options: {
+      responsive: true,
+      scales: { y: { beginAtZero: true, max: 100 } }
+    }
+  }
+);
+
+// 4) draw the pie chart:
+window._categoryChart = new Chart(
+  document.getElementById('categoryChart').getContext('2d'),
+  {
+    type: 'pie',
+    data: {
+      labels: catLabels,
+      datasets: [{
+        data: catValues
+      }]
+    },
+    options: { responsive: true }
+  }
+);
+
 
   // Clear old interview summaries
   const container = $("#reasonsModal .modal-body");
@@ -527,5 +586,6 @@
     }
   </script>
     <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </body>
 </html>
