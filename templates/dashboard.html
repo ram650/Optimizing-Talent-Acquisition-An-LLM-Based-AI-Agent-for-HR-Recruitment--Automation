@@ -219,7 +219,8 @@
       </div>
       <div class="modal-footer">
         <button type="button" id="scheduleInterviewBtn" class="btn btn-primary">Schedule Interview</button>
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" id="onboardBtn" class="btn btn-approve">Onboard</button>
+        <button type="button" id="rejectBtnModal" class="btn btn-reject">Reject</button>
       </div>
     </div>
   </div>
@@ -227,6 +228,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
   <script>
+    let currentApplicantId = null;
+    let currentRowElement = null;
     $(document).on("click", "#scheduleInterviewBtn", function () {
       if (!currentApplicantId) {
         alert("Invalid applicant ID");
@@ -289,9 +292,6 @@
     }
     }
     fetchInterviewers();
-
-    let currentApplicantId = null;
-    let currentRowElement = null;
   
     // Fetch applicants when role selection changes
     $("#roleSelect").on("change", function() {
@@ -347,7 +347,10 @@
         action += `<span class="status-approved">In Progress</span>`;
       } else if (applicant.round_1_results === "Rejected") {
         action += `<span class="status-rejected">Rejected</span>`;
-      } else {
+      } else if (applicant.round_1_results === "Onboarded") {
+        action += `<span class="status-approved">Onboarded</span>`;
+      }
+      else {
         action += `
           <button class="btn btn-sm btn-approve approve-btn">Approve</button>
           <button class="btn btn-sm btn-reject reject-btn">Reject</button>
@@ -441,8 +444,20 @@ $(document).ready(function() {
   // 1️⃣ Capture this row’s applicant ID
   const applicantId = $(this).data('applicant-id');
   currentApplicantId = applicantId;
-
+  currentRowElement = $(this);
+  $('#reasonsModal').data('applicant-id', applicantId);
   // 2️⃣ Populate resume-overview lists
+  const rowText = $(this).find('.action-cell').text().trim();
+  const isFinished = rowText === 'Onboarded' || rowText === 'Rejected';
+  
+  // Show/hide buttons based on status
+  if (isFinished) {
+    // Hide all buttons if the applicant is already onboarded or rejected
+    $('#scheduleInterviewBtn, #onboardBtn, #rejectBtnModal').hide();
+  } else {
+    // Show all buttons for applicants still in progress
+    $('#scheduleInterviewBtn, #onboardBtn, #rejectBtnModal').show();
+  }
   const mapEntry = applicantDataMap[applicantId] || { strengths: [], missing: [] };
   $('#strengthsList')
     .empty()
@@ -460,8 +475,10 @@ $(document).ready(function() {
   // 3️⃣ Clear out any previous recommendation & summaries
   $('#recommendationText').text('');
   $('#reasonsModal .dynamic-summary').remove();
+  // right before "new bootstrap.Modal…" in the click handler:
 
   // 4️⃣ Show the modal (triggers your shown.bs.modal for charts)
+  currentRowElement = $(this);
   new bootstrap.Modal(document.getElementById('reasonsModal')).show();
 
   // 5️⃣ Fetch the summaries + overall recommendation
@@ -608,6 +625,73 @@ $(document).ready(function() {
         }
       });
     }
+    $('#onboardBtn').on('click', function() {
+  // Try to get the ID from the variable first, then from the modal data attribute
+  const applicantId = currentApplicantId || $('#reasonsModal').data('applicant-id');
+  
+  if (!applicantId) {
+    alert('No applicant selected');
+    return;
+  }
+  
+  showLoadingOverlay();
+  $.ajax({
+    url: '/onboard',
+    method: 'POST',
+    contentType: 'application/json',
+    data: JSON.stringify({ applicant_id: applicantId }),
+    success: function() {
+      hideLoadingOverlay();
+      // Update the "Approve for Interview" column badge
+      currentRowElement.find('.action-cell').html(
+        `<span class="status-approved">Onboarded</span>`
+      );
+      // Hide all buttons in the modal
+      $('#scheduleInterviewBtn, #onboardBtn, #rejectBtnModal').hide();
+      // Hide the modal
+      bootstrap.Modal.getInstance($('#reasonsModal')).hide();
+    },
+    error: function(xhr) {
+      hideLoadingOverlay();
+      console.error('Onboard failed', xhr);
+      alert('Failed to onboard');
+    }
+  });
+});
+
+// And the same for the reject button handler
+$('#rejectBtnModal').on('click', function() {
+  // Try to get the ID from the variable first, then from the modal data attribute
+  const applicantId = currentApplicantId || $('#reasonsModal').data('applicant-id');
+  
+  if (!applicantId) {
+    alert('No applicant selected');
+    return;
+  }
+  
+  showLoadingOverlay();
+  $.ajax({
+    url: '/reject',
+    method: 'POST',
+    contentType: 'application/json',
+    data: JSON.stringify({ applicant_id: applicantId }),
+    success: function() {
+      hideLoadingOverlay();
+      currentRowElement.find('.action-cell').html(
+        `<span class="status-rejected">Rejected</span>`
+      );
+      // Hide all buttons in the modal
+      $('#scheduleInterviewBtn, #onboardBtn, #rejectBtnModal').hide();
+      // Hide the modal
+      bootstrap.Modal.getInstance($('#reasonsModal')).hide();
+    },
+    error: function(xhr) {
+      hideLoadingOverlay();
+      console.error('Reject failed', xhr);
+      alert('Failed to reject');
+    }
+  });
+});
   </script>
     <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>

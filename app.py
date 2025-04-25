@@ -865,5 +865,50 @@ def summarize_interview():
         "final_recommendation": final_recommendation
     })
 
+@app.route('/onboard', methods=['POST'])
+def onboard():
+    data = request.get_json()
+    applicant_id = data.get("applicant_id")
+    if not applicant_id:
+        return jsonify({"error": "Missing applicant_id"}), 400
+
+    # 1️⃣ Load the applicant
+    applicant = hrdb["applicants"].find_one({"_id": ObjectId(applicant_id)})
+    if not applicant:
+        return jsonify({"error": "Applicant not found"}), 404
+
+    # 2️⃣ Send onboarding email
+    subject = "Welcome to Future Tech.AI!"
+    body = (
+        f"Dear {applicant.get('name', 'Applicant')},\n\n"
+        "Congratulations on your successful interview process! We are excited to welcome you to Future Tech.AI.\n"
+        "Please find the onboarding details attached.\n\n"
+        "Best Regards,\nFuture Tech.AI"
+    )
+    receiver_email = applicant.get("email")
+    if receiver_email:
+        send_email_gmail(SENDER_EMAIL, SENDER_PASSWORD, receiver_email, subject, body)
+
+    # 3️⃣ Update the applicant record
+    hrdb["applicants"].update_one(
+        {"_id": ObjectId(applicant_id)},
+        {"$set": {"round_1_results": "Onboarded"}}
+    )
+
+    return jsonify({"message": "Onboarding email sent successfully!"})
+
+@app.route('/reject', methods=['POST'])
+def reject():
+    data = request.get_json()
+    applicant_id = data.get("applicant_id")
+    if not applicant_id:
+        return jsonify({"error": "Missing applicant_id"}), 400
+    #Update round_1_results to Rejected
+    hrdb["applicants"].update_one(
+        {"_id": ObjectId(applicant_id)},
+        {"$set": {"round_1_results": "Rejected"}}
+    )
+    return jsonify({"status": "success"}), 200
+
 if __name__ == "__main__":
     app.run(debug=True)
