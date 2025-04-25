@@ -191,7 +191,7 @@
         </div>
 
         <div class="modal-body">
-          <div class="row mb-4">
+          <div id="chartsContainer" class="row mb-4">
             <div class="col-md-6">
               <h6 class="text-center">Skill Scores</h6>
               <canvas id="skillChart"></canvas>
@@ -201,7 +201,9 @@
               <canvas id="categoryChart"></canvas>
             </div>
           </div>
-
+          <div id="finalRecommendationSection" class="mb-3">
+            <p id="recommendationText" class="fw-bold fs-4 mb-1"></p>
+          </div>
           <div class="row mb-3">
             <h5>Resume Overview</h5>
             <hr/>
@@ -311,7 +313,16 @@
         error() { alert("Failed to fetch applicants."); }
       });
     });
-  
+    function addApplicantRow(applicant) {
+      applicantDataMap[applicant._id] = {
+        strengths:  applicant.key_strengths      || [],
+        missing:    applicant.missing_requirements|| [],
+        skills:     applicant.skill_scores       || [],
+        categories: applicant.category_scores    || []
+      };
+      // … rest of your existing row construction …
+    }
+
     // Function to add a row for each applicant
     function addApplicantRow(applicant) {
       // store reasons under their _id
@@ -333,7 +344,7 @@
       // interview buttons/status
       let action = "<div style='display: flex; justify-content: space-around;'>";
       if (applicant.round_1_results === "Approved") {
-        action += `<span class="status-approved">Approved</span>`;
+        action += `<span class="status-approved">In Progress</span>`;
       } else if (applicant.round_1_results === "Rejected") {
         action += `<span class="status-rejected">Rejected</span>`;
       } else {
@@ -371,144 +382,157 @@
       $("#applicantsTbody").append($row);
     }
     
-    $(document).on("click", "#applicantsTbody tr", function(e) {
-  if ($(e.target).closest("button").length) return;
+$(document).ready(function() {
+  let currentApplicantId = null;
+  $('#reasonsModal').on('shown.bs.modal', function () {
+    // destroy any old charts
+    if (window._skillChart)     window._skillChart.destroy();
+    if (window._categoryChart)  window._categoryChart.destroy();
 
-  const id   = $(this).data("applicant-id");
-  currentApplicantId = id; // Set current ID globally for scheduling
+    // re-insert fresh canvases
+    $('#chartsContainer').html(`
+      <div class="col-md-6">
+        <h6 class="text-center">Skill Scores</h6>
+        <canvas id="skillChart"></canvas>
+      </div>
+      <div class="col-md-6">
+        <h6 class="text-center">Category Breakdown</h6>
+        <canvas id="categoryChart"></canvas>
+      </div>
+    `);
 
-  const data = applicantDataMap[id] || {};
+    // pull the static skills/categories from your pre-fetched map
+    const { skills = [], categories = [] } = applicantDataMap[currentApplicantId] || {};
 
-  // Fill “Key Points”
-  const $str = $("#strengthsList").empty();
-  (data.strengths || []).length
-    ? data.strengths.forEach(pt => $str.append(`<li class="list-group-item">${pt}</li>`))
-    : $str.append(`<li class="list-group-item text-muted">No key points available.</li>`);
+    window._skillChart = new Chart(
+      document.getElementById('skillChart').getContext('2d'),
+      {
+        type: 'bar',
+        data: {
+          labels:   skills.map(s => s.skill),
+          datasets: [{ label: 'Score', data: skills.map(s => s.score) }]
+        },
+        options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
+      }
+    );
 
-  // Fill “Lacking Points”
-  const $lack = $("#lackingList").empty();
-  (data.missing || []).length
-    ? data.missing.forEach(pt => $lack.append(`<li class="list-group-item">${pt}</li>`))
-    : $lack.append(`<li class="list-group-item text-muted">No lacking points noted.</li>`);
+    window._categoryChart = new Chart(
+      document.getElementById('categoryChart').getContext('2d'),
+      {
+        type: 'pie',
+        data: {
+          labels:   categories.map(c => c.category),
+          datasets: [{ data: categories.map(c => c.score) }]
+        },
+        options: { responsive: true }
+      }
+    );
+  });
 
-  // Clear previous summary to prevent showing stale info before AJAX completes
-  $("#commClarity, #techMastery, #problemSolving, #softSkills").text("Loading...");
-  $("#summaryKeyStrengths, #summaryConcernsGaps").empty().append(`<li class="list-group-item text-muted">Loading...</li>`);
 
-  // Show modal immediately with placeholders
-  const modal = new bootstrap.Modal(document.getElementById("reasonsModal"));
-  modal.show();
+  //
+  // 2️⃣ When clicking a row, capture *that* applicant’s ID,
+  //    populate the lists, clear old summaries, show the modal,
+  //    *then* fetch that one ID’s interview summaries.
+  //
+  $('#applicantsTbody').on('click', 'tr', function(e) {
+  if ($(e.target).is('button')) return;  // ignore button-clicks
 
-  // Fetch updated summary
+  // 1️⃣ Capture this row’s applicant ID
+  const applicantId = $(this).data('applicant-id');
+  currentApplicantId = applicantId;
+
+  // 2️⃣ Populate resume-overview lists
+  const mapEntry = applicantDataMap[applicantId] || { strengths: [], missing: [] };
+  $('#strengthsList')
+    .empty()
+    .append(
+      (mapEntry.strengths.length ? mapEntry.strengths : ['No key points available.'])
+        .map(pt => `<li class="list-group-item">${pt}</li>`).join('')
+    );
+  $('#lackingList')
+    .empty()
+    .append(
+      (mapEntry.missing.length ? mapEntry.missing : ['No lacking points noted.'])
+        .map(pt => `<li class="list-group-item">${pt}</li>`).join('')
+    );
+
+  // 3️⃣ Clear out any previous recommendation & summaries
+  $('#recommendationText').text('');
+  $('#reasonsModal .dynamic-summary').remove();
+
+  // 4️⃣ Show the modal (triggers your shown.bs.modal for charts)
+  new bootstrap.Modal(document.getElementById('reasonsModal')).show();
+
+  // 5️⃣ Fetch the summaries + overall recommendation
   $.ajax({
     url: "/summarize-interview",
-    type: "POST",
+    method: "POST",
     contentType: "application/json",
-    dataType: "json",  // ← ADD THIS
-    data: JSON.stringify({ applicant_id: id }),
-    success: function(resp) {
-  console.log("Summary response:", resp); // 🪵 debug log
-  // 1) grab the raw arrays we stashed:
-const raw = applicantDataMap[id];
-const skillLabels = raw.skills.map(s => s.skill);
-const skillValues = raw.skills.map(s => s.score);
-const catLabels   = raw.categories.map(c => c.category);
-const catValues   = raw.categories.map(c => c.score);
+    dataType: "json",
+    data: JSON.stringify({ applicant_id: applicantId }),
+    success: function(data) {
+      // ↪️ Inject the one-line final recommendation
+      $('#recommendationText').text("Overall Candidate Score: "+data.final_recommendation);
 
-// 2) if you want to destroy old charts, keep references:
-if (window._skillChart)  window._skillChart .destroy();
-if (window._categoryChart) window._categoryChart.destroy();
+      // ↪️ Remove any old summaries (again, just in case)
+      $('#reasonsModal .dynamic-summary').remove();
 
-// 3) draw the bar chart:
-window._skillChart = new Chart(
-  document.getElementById('skillChart').getContext('2d'),
-  {
-    type: 'bar',
-    data: {
-      labels: skillLabels,
-      datasets: [{
-        label: 'Score',
-        data: skillValues,
-        // Chart.js will pick defaults; we won’t hard-code colors
-      }]
+      // ↪️ Render each interview’s summary
+      const container = $('#reasonsModal .modal-body');
+      data.interview_summaries.forEach(entry => {
+        const iv  = entry.summary;
+        const num = entry.interview_no;
+        const html = `
+          <div class="dynamic-summary">
+            <h5>Interview ${num} Summary</h5><hr/>
+            <div class="mb-3">
+              <h6 class="text-primary">Communication &amp; Clarity</h6>
+              <p class="ps-2">${iv.communication_clarity || '—'}</p>
+            </div>
+            <div class="mb-3">
+              <h6 class="text-primary">Technical Mastery</h6>
+              <p class="ps-2">${iv.technical_mastery || '—'}</p>
+            </div>
+            <div class="mb-3">
+              <h6 class="text-primary">Problem-Solving &amp; Critical Thinking</h6>
+              <p class="ps-2">${iv.problem_solving || '—'}</p>
+            </div>
+            <div class="mb-3">
+              <h6 class="text-primary">Soft Skills &amp; Professionalism</h6>
+              <p class="ps-2">${iv.soft_skills || '—'}</p>
+            </div>
+            <div class="mb-3">
+              <h6 class="text-primary">Key Strengths</h6>
+              <ul class="list-group ps-2">
+                ${
+                  iv.key_strengths?.length
+                    ? iv.key_strengths.map(pt => `<li class="list-group-item">${pt}</li>`).join('')
+                    : `<li class="list-group-item text-muted">None noted.</li>`
+                }
+              </ul>
+            </div>
+            <div class="mb-4">
+              <h6 class="text-primary">Concerns &amp; Gaps</h6>
+              <ul class="list-group ps-2">
+                ${
+                  iv.concerns_gaps?.length
+                    ? iv.concerns_gaps.map(pt => `<li class="list-group-item">${pt}</li>`).join('')
+                    : `<li class="list-group-item text-muted">None noted.</li>`
+                }
+              </ul>
+            </div>
+          </div>
+        `;
+        container.append(html);
+      });
     },
-    options: {
-      responsive: true,
-      scales: { y: { beginAtZero: true, max: 100 } }
-    }
-  }
-);
-
-// 4) draw the pie chart:
-window._categoryChart = new Chart(
-  document.getElementById('categoryChart').getContext('2d'),
-  {
-    type: 'pie',
-    data: {
-      labels: catLabels,
-      datasets: [{
-        data: catValues
-      }]
-    },
-    options: { responsive: true }
-  }
-);
-
-
-  // Clear old interview summaries
-  const container = $("#reasonsModal .modal-body");
-  container.find(".dynamic-summary").remove();
-
-  // Loop through interviews array
-  (resp || []).forEach((entry) => {
-    const interview = entry.summary;
-    const iNum = entry.interview_no;
-
-    const html = `
-      <div class="dynamic-summary">
-        <h5>Interview ${iNum} Summary</h5>
-        <hr/>
-        <div class="summary-section mb-3">
-          <h6 class="text-primary">Communication &amp; Clarity</h6>
-          <p class="ps-2">${interview.communication_clarity || "—"}</p>
-        </div>
-        <div class="summary-section mb-3">
-          <h6 class="text-primary">Technical Mastery</h6>
-          <p class="ps-2">${interview.technical_mastery || "—"}</p>
-        </div>
-        <div class="summary-section mb-3">
-          <h6 class="text-primary">Problem‑Solving &amp; Critical Thinking</h6>
-          <p class="ps-2">${interview.problem_solving || "—"}</p>
-        </div>
-        <div class="summary-section mb-3">
-          <h6 class="text-primary">Soft Skills &amp; Professionalism</h6>
-          <p class="ps-2">${interview.soft_skills || "—"}</p>
-        </div>
-        <div class="summary-section mb-3">
-          <h6 class="text-primary">Key Strengths</h6>
-          <ul class="list-group ps-2">
-            ${interview.key_strengths?.map(pt => `<li class="list-group-item">${pt}</li>`).join("") || `<li class="list-group-item text-muted">None noted.</li>`}
-          </ul>
-        </div>
-        <div class="summary-section mb-4">
-          <h6 class="text-primary">Concerns &amp; Gaps</h6>
-          <ul class="list-group ps-2">
-            ${interview.concerns_gaps?.map(pt => `<li class="list-group-item">${pt}</li>`).join("") || `<li class="list-group-item text-muted">None noted.</li>`}
-          </ul>
-        </div>
-      </div>
-    `;
-    container.append(html);
-  });
-},
     error: function(xhr) {
       console.error("Summary fetch failed", xhr);
-      $("#commClarity, #techMastery, #problemSolving, #softSkills").text("-");
-      $("#summaryKeyStrengths, #summaryConcernsGaps").empty().append(`<li class="list-group-item text-danger">-</li>`);
     }
   });
 });
-
+});
 
     // Modal schedule button click handler
     $("#scheduleBtn").on("click", function(){
@@ -549,7 +573,7 @@ window._categoryChart = new Chart(
         data: JSON.stringify({ applicant_id: applicantId, round_1_results: newStatus }),
         success: function(response) {
           hideLoadingOverlay();
-          let badgeClass = newStatus === "Approved" ? "status-approved" : "status-rejected";
+          let badgeClass = newStatus === "In Progress" ? "status-approved" : "status-rejected";
           rowElement.find(".action-cell").html(`<span class="${badgeClass}">${newStatus}</span>`);
           alert("Interview status updated to " + newStatus);
         },

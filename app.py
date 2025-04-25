@@ -244,6 +244,7 @@ def submit_applicant():
             Do not search for exact words in the job description, but analyse the contents of the weightage as well as the resume contents thoroughly and check if it might be relevant to the topic in the weightage.
             Consider only the points that are relevant to the job description and weightage topics for providing the reasons. 
             Return only the following as a json text:
+            ```json
             {{
                 "resume_score": <integer (0-100)>,
                 "recommendation": "<Approved/Rejected>",
@@ -263,8 +264,10 @@ def submit_applicant():
                         "score": <integer (0-100)>,
                         "weight": <integer (0-100)>
                     }}
-                ]
+                ],
+                "experience": <integer (0-100)>,
             }}
+            ```
 
             Guidelines:
             1. Basic info must include name, email, overall score, and recommendation and (Ensure that Key strengths and missing requirements should be aligned with job requirements.)
@@ -276,6 +279,8 @@ def submit_applicant():
             7. All fields must be included even if values are empty
             8. Ensure JSON is valid and properly formatted
             9. Return just the json enclosed within triple backticks followed by the word json, and no other explanatory text or text of any kind.
+            10. If no experience is mentioned then consider it as 0 years of experience. Internships and projects are not considered as experience.
+            Do not add any additional note or text or comments in the response.
         """
         groq_client = Groq(api_key=GROQ_API_KEY)
         completion = groq_client.chat.completions.create(
@@ -287,7 +292,7 @@ def submit_applicant():
             stream=False,
         )
         result = completion.choices[0].message.content
-        print(f"\n\n\nScore Result: {result[7:-3]}")
+        print(f"\n\n\nScore Result: {result}")
         # print(result[8:-3])
         score_result = json.loads(result[7:-3])
         applicant = {
@@ -300,7 +305,8 @@ def submit_applicant():
             "missing_requirements": score_result["missing_requirements"],
             "skill_scores": score_result["skill_scores"],
             "category_scores": score_result["category_scores"],
-            "resume_filtering": score_result["recommendation"]
+            "resume_filtering": score_result["recommendation"],
+            "experience": score_result["experience"],
         }
 
         hrdb["applicants"].insert_one(applicant)
@@ -334,7 +340,9 @@ def enhance_role():
     try:
         data = request.get_json()
         role = data.get('role')
+        salary_package = data.get('salary_package')
         job_description = data.get('job_description')
+        experience = data.get('experience')
         print(f"Received Data: {data}")
         if not role or not job_description:
             return jsonify({"error": "Missing required data"}), 400
@@ -347,9 +355,27 @@ def enhance_role():
             4. At least 5 key topics or skills that are crucial for the role, along with a recommended weight
             (ensuring the total sums to 100%).
             Use the following input as context: '{job_description}'
+            This is the mentioned salary package in lakhs per annum: {salary_package}
+            This is the mentioned experience in years: {experience}
             Return your response in as text formatted as JSON with two keys:
             - 'enhanced_description': a string containing the enhanced job description.
-            - 'skills': an array of objects, each with 'skill' (string) and 'weight' (number, as percentage)."""
+            - 'skills': an array of objects, each with 'skill' (string) and 'weight' (number, as percentage).
+            
+            The json must be enclosed within triple backticks followed by the word json, and no other explanatory text or text of any kind.
+            Here is the json format:
+            ```json
+            {{
+                "enhanced_description": "<text>",
+                "skills": [
+                    {{
+                        "skill": "<skill name>",
+                        "weight": <integer (0-100)>
+                    }}
+                ]
+            }}
+            ```
+            Ensure JSON is valid and properly formatted.
+            DO NOT GIVE ANY ADDITIONAL TEXT OR EXPLANATION, JUST RETURN THE JSON."""
 
         groq_client = Groq(api_key=GROQ_API_KEY)
         completion = groq_client.chat.completions.create(
@@ -361,8 +387,8 @@ def enhance_role():
             stream=False,
         )
         response_text = completion.choices[0].message.content
-        print(f"Response Text: {response_text[8:-3]}")
-        result = json.loads(response_text[8:-3])
+        print(f"Response Text: {response_text[7:-3]}")
+        result = json.loads(response_text[7:-3])
         print(result)
         return jsonify(result)
     
@@ -375,6 +401,7 @@ def publish_role():
     try:
         data = request.get_json()
         role_name = data.get('role_name')
+        exp = data.get('experience')
         salary_package = data.get('salary_package')
         job_description = data.get('job_description')
         weights = data.get('weights')
@@ -386,7 +413,8 @@ def publish_role():
             "Role": role_name,
             "Salary_package": salary_package,
             "JD": job_description,
-            "Weights": weights
+            "Weights": weights,
+            "Experience": exp,
         }
 
         hrdb["roles"].insert_one(role_doc)
@@ -632,29 +660,26 @@ def handle_send_email():
 def summarize_interview():
     data = request.get_json()
     applicant_id = data.get("applicant_id")
-
     if not applicant_id:
         return jsonify({"error": "Missing applicant_id"}), 400
 
+    # 1️⃣ Load the applicant
     applicant = hrdb["applicants"].find_one({"_id": ObjectId(applicant_id)})
     if not applicant:
         return jsonify({"error": "Applicant not found"}), 404
 
+    # 2️⃣ Build all interview summaries (exactly as you had)
     no_of_interviews = applicant.get("no_of_interviews", 0)
     if no_of_interviews == 0:
         return jsonify({"error": "No interviews found for this applicant"}), 400
 
     all_summaries = []
-
     for interview_no in range(1, no_of_interviews + 1):
-        print(interview_no)
         interview = hrdb["interviews"].find_one({
             "applicant_id": ObjectId(applicant_id),
             "interview_no": interview_no
         })
-
-        if not interview:
-            print(f"Interview {interview_no} not found.")
+        if not interview or not interview.get("meeting_captions"):
             continue
 
         captions = interview.get("meeting_captions")
@@ -662,13 +687,11 @@ def summarize_interview():
             print(f"Interview {interview_no} has no captions.")
             continue
 
-        # If summary already exists, use it
-        existing_summary = interview.get("interview_summary")
-        if existing_summary:
-            print(f"Interview {interview_no} already summarized. Using existing summary.")
+        existing = interview.get("interview_summary")
+        if existing:
             all_summaries.append({
                 "interview_no": interview_no,
-                "summary": existing_summary
+                "summary": existing
             })
             continue
 
@@ -748,9 +771,99 @@ def summarize_interview():
             "interview_no": interview_no,
             "summary": parsed_summary
         })
-    print("All summaries to be sent to frontend:", all_summaries)
+    final_recommendation = applicant.get("recommendation_score")
+    if final_recommendation is None:
+        # 1. Fetch job role details
+        job_role = applicant.get("job_role")
+        role = hrdb["roles"].find_one({"role_name": job_role}) if job_role else None
 
-    return jsonify(all_summaries)
+        # 2. Format role requirements
+        if role and "requirements" in role:
+            role_weights = role["requirements"]  # assuming dict: {skill: weight}
+            requirements_text = "\n".join(
+                f"{skill}: {weight}%" for skill, weight in role_weights.items()
+            )
+        else:
+            role_weights = {}
+            requirements_text = "Not Available"
+
+        # 3. Format all interview summaries for the prompt
+        combined_summary_text = "\n\n".join(
+            f"Interview {s['interview_no']} Summary:\n"
+            f"Communication & Clarity: {s['summary'].get('communication_clarity')}\n"
+            f"Technical Mastery: {s['summary'].get('technical_mastery')}\n"
+            f"Problem Solving: {s['summary'].get('problem_solving')}\n"
+            f"Soft Skills: {s['summary'].get('soft_skills')}\n"
+            f"Key Strengths: {', '.join(s['summary'].get('key_strengths', []))}\n"
+            f"Concerns or Gaps: {', '.join(s['summary'].get('concerns_gaps', []))}"
+            for s in all_summaries
+        )
+
+        # 4. Construct the final LLM prompt
+        recommendation_prompt = f"""
+        You are an expert hiring decision maker. Based on the candidate's full profile, job role expectations, and interview summaries, provide a final recruitment recommendation.
+
+        CANDIDATE DETAILS:
+        - Name: {applicant.get("name")}
+        - Email: {applicant.get("email")}
+        - Applied Role: {job_role}
+        - Education: {applicant.get("education", "Not provided")}
+        - Experience: {applicant.get("experience", "Not provided")} years
+        - Additional Notes: {applicant.get("notes", "")}
+
+        ROLE REQUIREMENTS (with skill weights indicating importance):
+        {requirements_text}
+
+        INTERVIEW PERFORMANCE SUMMARIES:
+        {combined_summary_text}
+
+        ---
+
+        Final Decision:
+        Based on the job expectations, skill weightage, and how the candidate performed in interviews, recommend a mark out of 100 for the candidate.
+
+        Be very lineant in the recommendation, and do not be too strict.
+        Do not be too strict, you can be lenient if the candidate is good in most areas but lacks in some and if the candidate may seem to have good potential.
+        Remember this is just a recommendation and not a final decision.
+        Respond with **only the marks** (no notes or explanation)
+        """
+
+        # 5. Call LLM
+        completion = groq_client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "user", "content": recommendation_prompt}],
+            temperature=0.5,
+            max_completion_tokens=1024,
+            top_p=0.95,
+            stream=False,
+        )
+
+        # 6. Parse and handle JSON
+        recommendation_raw = completion.choices[0].message.content.strip()
+
+        try:
+            final_recommendation = recommendation_raw
+        except Exception as e:
+            print("Error parsing final recommendation:", e)
+            print("Raw recommendation:", recommendation_raw)
+            final_recommendation = "Could not generate a recommendation."
+
+        # 7. Final Response
+        response = {
+            "interview_summaries": all_summaries,
+            "final_recommendation": final_recommendation
+        }
+        hrdb["applicants"].update_one(
+            {"_id": applicant["_id"]},
+            {"$set": {"recommendation_score": final_recommendation}}
+        )
+        print("Final Recommendation:", final_recommendation)
+        return jsonify(response)
+    
+    return jsonify({
+        "interview_summaries": all_summaries,
+        "final_recommendation": final_recommendation
+    })
 
 if __name__ == "__main__":
     app.run(debug=True)
