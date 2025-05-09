@@ -34,6 +34,14 @@
       font-weight: bold;
       font-size: 18px;
     }
+    .status-in-progress {
+      background-color: #edead4;
+      color: #776500;
+      padding: 5px 10px;
+      border-radius: 5px;
+      font-weight: bold;
+      font-size: 18px;
+    }
     .status-rejected {
       background-color: #f8d7da;
       color: #dc3545;
@@ -231,11 +239,13 @@
     let currentApplicantId = null;
     let currentRowElement = null;
     $(document).on("click", "#scheduleInterviewBtn", function () {
-      if (!currentApplicantId) {
+      const applicantId = currentApplicantId || $("#reasonsModal").data("applicant-id");
+      console.log("Schedule for",applicantId);
+      if (!applicantId) {
         alert("Invalid applicant ID");
         return;
       }
-
+      currentApplicantId = applicantId;
       const now = new Date().toISOString().slice(0, 16);
       $("#interviewDateTime").attr("min", now);
       $("#interviewDateTime").val(""); // Reset previous time
@@ -344,7 +354,7 @@
       // interview buttons/status
       let action = "<div style='display: flex; justify-content: space-around;'>";
       if (applicant.round_1_results === "Approved") {
-        action += `<span class="status-approved">In Progress</span>`;
+        action += `<span class="status-in-progress">In Progress</span>`;
       } else if (applicant.round_1_results === "Rejected") {
         action += `<span class="status-rejected">Rejected</span>`;
       } else if (applicant.round_1_results === "Onboarded") {
@@ -443,6 +453,7 @@ $(document).ready(function() {
 
   // 1️⃣ Capture this row’s applicant ID
   const applicantId = $(this).data('applicant-id');
+  console.log('clicked', applicantId);
   currentApplicantId = applicantId;
   currentRowElement = $(this);
   $('#reasonsModal').data('applicant-id', applicantId);
@@ -590,7 +601,7 @@ $(document).ready(function() {
         data: JSON.stringify({ applicant_id: applicantId, round_1_results: newStatus }),
         success: function(response) {
           hideLoadingOverlay();
-          let badgeClass = newStatus === "In Progress" ? "status-approved" : "status-rejected";
+          let badgeClass = newStatus === "In Progress" ? "status-in-progress" : "status-rejected";
           rowElement.find(".action-cell").html(`<span class="${badgeClass}">${newStatus}</span>`);
           alert("Interview status updated to " + newStatus);
         },
