@@ -170,18 +170,24 @@ def clean_captions(history):
 
 def run_meet_bot(meeting_link, applicant_id, interview_no, duration_seconds=3600):
     chrome_binary_path = r'C:\Program Files\Google\Chrome\Application\chrome.exe'  # Adjust if needed
-    user_data_dir = r'C:\Users\IrfaanFareedA\AppData\Local\Google\Chrome\User Data'  # Your actual path
+    # user_data_dir = r'C:\Users\admin\AppData\Local\Google\Chrome\User Data'  # Your actual path
+    user_data_dir = r'C:\chrome_user_data'  # Your actual path
 
     options = Options()
     options.binary_location = chrome_binary_path
     options.add_argument(f"--user-data-dir={user_data_dir}")  # Use your local Chrome data
-    options.add_argument(f"--profile-directory={os.getenv('CHROME_PROFILE')}")  # Or 'Profile 1', etc.
+    options.add_argument(f"--profile-directory=Profile 2")  # Or 'Profile 1', etc.
     options.add_argument("--disable-notifications")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--remote-debugging-port=9222")
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option('useAutomationExtension', False)
 
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-
+    try:
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        print("Chrome started successfully with the specified profile!")
+    except Exception as e:
+        print(f"Failed to start Chrome: {e}")
     print("✅ Navigating to Google Meet...")
     driver.get(meeting_link)
     time.sleep(10)
@@ -211,9 +217,9 @@ def run_meet_bot(meeting_link, applicant_id, interview_no, duration_seconds=3600
     return cleaned_history
 
 
-# if __name__ == "__main__":
-#     meeting_url = "https://meet.google.com/vhp-pptm-tqp" 
-#     applicant_id = "67d182de8a873ceafc315d20"
-#     google_account_email = os.getenv("EMAIL_SENDER")
-#     google_account_password = os.getenv("EMAIL_APP_PASSWORD")  
-#     run_meet_bot(meeting_url, applicant_id, duration_seconds=60)
+if __name__ == "__main__":
+    meeting_url = "https://meet.google.com/vhp-pptm-tqp" 
+    applicant_id = "67d182de8a873ceafc315d20"
+    google_account_email = os.getenv("EMAIL_SENDER")
+    google_account_password = os.getenv("EMAIL_APP_PASSWORD")  
+    run_meet_bot(meeting_url, applicant_id, 1, duration_seconds=60)

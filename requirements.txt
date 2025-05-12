@@ -9,6 +9,9 @@ apscheduler
 selenium
 webdriver-manager
 pytz
+google-api-python-client
+google_auth_oauthlib
+PyMuPDF
 
 # create_database.py requirements
 langchain
