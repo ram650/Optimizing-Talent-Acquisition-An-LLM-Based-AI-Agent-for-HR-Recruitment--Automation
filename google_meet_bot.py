@@ -176,7 +176,7 @@ def run_meet_bot(meeting_link, applicant_id, interview_no, duration_seconds=3600
     options = Options()
     options.binary_location = chrome_binary_path
     options.add_argument(f"--user-data-dir={user_data_dir}")  # Use your local Chrome data
-    options.add_argument(f"--profile-directory=Profile 2")  # Or 'Profile 1', etc.
+    options.add_argument(f"--profile-directory=Profile 1")  # Or 'Profile 1', etc.
     options.add_argument("--disable-notifications")
     options.add_argument("--disable-extensions")
     options.add_argument("--remote-debugging-port=9222")
@@ -217,9 +217,9 @@ def run_meet_bot(meeting_link, applicant_id, interview_no, duration_seconds=3600
     return cleaned_history
 
 
-if __name__ == "__main__":
-    meeting_url = "https://meet.google.com/vhp-pptm-tqp" 
-    applicant_id = "67d182de8a873ceafc315d20"
-    google_account_email = os.getenv("EMAIL_SENDER")
-    google_account_password = os.getenv("EMAIL_APP_PASSWORD")  
-    run_meet_bot(meeting_url, applicant_id, 1, duration_seconds=60)
+# if __name__ == "__main__":
+#     meeting_url = "https://meet.google.com/vhp-pptm-tqp" 
+#     applicant_id = "67d182de8a873ceafc315d20"
+#     google_account_email = os.getenv("EMAIL_SENDER")
+#     google_account_password = os.getenv("EMAIL_APP_PASSWORD")  
+#     run_meet_bot(meeting_url, applicant_id, 1, duration_seconds=60)
