@@ -45,10 +45,30 @@ AiHR is a fully automated Human Resource Management system built with Python and
    Create a `.env` file in the root directory with the following variables:
 
    ```
-   MONGODB_URI=your_mongodb_connection_string
-   EMAIL_SENDER=your_email_address
-   EMAIL_APP_PASSWORD=your_app_password
-   CHROME_PROFILE=Profile 2  # or any name as per your Chrome user profile
+   # MongoDB
+   MONGODB_URI=<your_mongodb_connection_string>
+   
+   # Email Configuration
+   EMAIL_SENDER=<your_email_address>
+   EMAIL_APP_PASSWORD=<your_app_specific_password>
+   
+   # Chrome Profile for Google Meet Automation
+   CHROME_PROFILE=<your_chrome_profile_name>  # e.g., "Profile 2" or "Person 1"
+   
+   # File Storage Paths
+   UPLOAD_FOLDER=KnowledgeBase
+   DATA_PATH=KnowledgeBase
+   CHROMA_PATH=chroma
+   
+   # Google Drive Folder
+   PARENT_FOLDER_ID=<your_google_drive_folder_id>  # e.g., "docs"
+   
+   # AI Model & API
+   GROQ_API_KEY=<your_groq_api_key>
+   MODEL=<your_preferred_model>  # e.g., "llama-3.1-8b-instant"
+   
+   # Interviewer Emails (Comma-separated)
+   INTERVIEWERS=<email1>,<email2>,<email3>  # e.g., alice@example.com,bob@example.com
    ```
 
 4. **Google API Credentials**
@@ -59,7 +79,7 @@ AiHR is a fully automated Human Resource Management system built with Python and
 
 ---
 
-## 🧪 Running the Google Meet Bot
+## 🧪 Running the App
 
 You can run the application by executing the app.py file.
 
