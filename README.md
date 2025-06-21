@@ -124,4 +124,4 @@ Pull requests are welcome! Please follow these steps:
 
 ## 👨‍💻 Author
 
-Developed with 💻 by [@irf-rox](https://github.com/irf-rox) and [@ram650]
+Developed with 💻 by [@irf-rox](https://github.com/irf-rox) and [@ram650](https://github.com/ram650)
